@@ -1,41 +1,76 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * GMB Everywhere Mobile - Theme Configuration
+ * Color palette inspired by GMB Everywhere's warm terracotta branding
  */
 
 import { Platform } from "react-native";
 
-const tintColorLight = "#0a7ea4";
-const tintColorDark = "#fff";
+// Primary brand colors
+const terracotta = "#C4704B";
+const terracottaDark = "#A85A3A";
+const terracottaLight = "#E8C4B4";
 
 export const Colors = {
   light: {
-    text: "#11181C",
-    background: "#fff",
-    tint: tintColorLight,
+    text: "#1A1A1A",
+    textSecondary: "#666666",
+    textDisabled: "#AAAAAA",
+    background: "#FDF8F5",
+    surface: "#FFFFFF",
+    tint: terracotta,
+    tintDark: terracottaDark,
+    tintLight: terracottaLight,
     icon: "#687076",
-    tabIconDefault: "#687076",
-    tabIconSelected: tintColorLight,
+    tabIconDefault: "#9BA1A6",
+    tabIconSelected: terracotta,
+    border: "#E5E5E5",
+    success: "#34A853",
+    warning: "#FBBC04",
+    error: "#EA4335",
+    cardShadow: "rgba(0, 0, 0, 0.08)",
   },
   dark: {
     text: "#ECEDEE",
+    textSecondary: "#9BA1A6",
+    textDisabled: "#666666",
     background: "#151718",
-    tint: tintColorDark,
+    surface: "#1E2022",
+    tint: terracottaLight,
+    tintDark: terracotta,
+    tintLight: terracottaDark,
     icon: "#9BA1A6",
-    tabIconDefault: "#9BA1A6",
-    tabIconSelected: tintColorDark,
+    tabIconDefault: "#687076",
+    tabIconSelected: terracottaLight,
+    border: "#2A2D2F",
+    success: "#34A853",
+    warning: "#FBBC04",
+    error: "#EA4335",
+    cardShadow: "rgba(0, 0, 0, 0.3)",
   },
+};
+
+export const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+};
+
+export const BorderRadius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  full: 9999,
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: "system-ui",
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: "ui-serif",
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: "ui-rounded",
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: "ui-monospace",
   },
   default: {

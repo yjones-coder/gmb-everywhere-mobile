@@ -1,277 +1,351 @@
-import { Image } from "expo-image";
-import { useRouter, Link } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { HelloWave } from "@/components/hello-wave";
-import ParallaxScrollView from "@/components/parallax-scroll-view";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { getLoginUrl } from "@/constants/oauth";
-import { useAuth } from "@/hooks/use-auth";
+import { BusinessCard } from "@/components/ui/business-card";
+import { Colors, Spacing } from "@/constants/theme";
+import { Business, mockBusinesses, searchBusinesses } from "@/data/mock-businesses";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useRecentSearches } from "@/hooks/use-local-storage";
 
 export default function HomeScreen() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? "light"];
   const router = useRouter();
 
-  useEffect(() => {
-    console.log("[HomeScreen] Auth state:", {
-      hasUser: !!user,
-      loading,
-      isAuthenticated,
-      user: user ? { id: user.id, openId: user.openId, name: user.name, email: user.email } : null,
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Business[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const { searches, addSearch, deleteSearch, clearSearches } = useRecentSearches();
+
+  const handleSearch = useCallback(() => {
+    if (!searchQuery.trim()) return;
+    const results = searchBusinesses(searchQuery);
+    setSearchResults(results);
+    setHasSearched(true);
+    addSearch(searchQuery, results.length);
+  }, [searchQuery, addSearch]);
+
+  const handleRecentSearchPress = useCallback((query: string) => {
+    setSearchQuery(query);
+    const results = searchBusinesses(query);
+    setSearchResults(results);
+    setHasSearched(true);
+  }, []);
+
+  const handleBusinessPress = useCallback((business: Business) => {
+    router.push({
+      pathname: "/business/[id]",
+      params: { id: business.id },
     });
-  }, [user, loading, isAuthenticated]);
+  }, [router]);
 
-  const handleLogin = async () => {
-    try {
-      console.log("[Auth] Login button clicked");
-      setIsLoggingIn(true);
-      const loginUrl = getLoginUrl();
-      console.log("[Auth] Generated login URL:", loginUrl);
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setHasSearched(false);
+  }, []);
 
-      // On web, use direct redirect in same tab
-      // On mobile, use WebBrowser to open OAuth in a separate context
-      if (Platform.OS === "web") {
-        console.log("[Auth] Web platform: redirecting to OAuth in same tab...");
-        window.location.href = loginUrl;
-        return;
-      }
+  const renderRecentSearch = ({ item }: { item: typeof searches[0] }) => (
+    <Pressable
+      style={[styles.recentItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      onPress={() => handleRecentSearchPress(item.query)}
+    >
+      <MaterialIcons name="history" size={20} color={colors.textSecondary} />
+      <View style={styles.recentTextContainer}>
+        <ThemedText style={styles.recentQuery}>{item.query}</ThemedText>
+        <ThemedText style={[styles.recentMeta, { color: colors.textSecondary }]}>
+          {item.resultCount} results
+        </ThemedText>
+      </View>
+      <Pressable onPress={() => deleteSearch(item.id)} hitSlop={8}>
+        <MaterialIcons name="close" size={18} color={colors.textDisabled} />
+      </Pressable>
+    </Pressable>
+  );
 
-      // Mobile: Open OAuth URL in browser
-      // The OAuth server will redirect to our deep link (manusapp://oauth/callback?code=...&state=...)
-      console.log("[Auth] Opening OAuth URL in browser...");
-      const result = await WebBrowser.openAuthSessionAsync(
-        loginUrl,
-        undefined, // Deep link is already configured in getLoginUrl, so no need to specify here
-        {
-          preferEphemeralSession: false,
-          showInRecents: true,
-        },
-      );
-
-      console.log("[Auth] WebBrowser result:", result);
-      if (result.type === "cancel") {
-        console.log("[Auth] OAuth cancelled by user");
-      } else if (result.type === "dismiss") {
-        console.log("[Auth] OAuth dismissed");
-      } else if (result.type === "success" && result.url) {
-        console.log("[Auth] OAuth session successful, navigating to callback:", result.url);
-        // Extract code and state from the URL
-        try {
-          // Parse the URL - it might be exp:// or a regular URL
-          let url: URL;
-          if (result.url.startsWith("exp://") || result.url.startsWith("exps://")) {
-            // For exp:// URLs, we need to parse them differently
-            // Format: exp://192.168.31.156:8081/--/oauth/callback?code=...&state=...
-            const urlStr = result.url.replace(/^exp(s)?:\/\//, "http://");
-            url = new URL(urlStr);
-          } else {
-            url = new URL(result.url);
-          }
-
-          const code = url.searchParams.get("code");
-          const state = url.searchParams.get("state");
-          const error = url.searchParams.get("error");
-
-          console.log("[Auth] Extracted params from callback URL:", {
-            code: code?.substring(0, 20) + "...",
-            state: state?.substring(0, 20) + "...",
-            error,
-          });
-
-          if (error) {
-            console.error("[Auth] OAuth error in callback:", error);
-            return;
-          }
-
-          if (code && state) {
-            // Navigate to callback route with params
-            console.log("[Auth] Navigating to callback route with params...");
-            router.push({
-              pathname: "/oauth/callback" as any,
-              params: { code, state },
-            });
-          } else {
-            console.error("[Auth] Missing code or state in callback URL");
-          }
-        } catch (err) {
-          console.error("[Auth] Failed to parse callback URL:", err, result.url);
-          // Fallback: try parsing with regex
-          const codeMatch = result.url.match(/[?&]code=([^&]+)/);
-          const stateMatch = result.url.match(/[?&]state=([^&]+)/);
-
-          if (codeMatch && stateMatch) {
-            const code = decodeURIComponent(codeMatch[1]);
-            const state = decodeURIComponent(stateMatch[1]);
-            console.log("[Auth] Fallback: extracted params via regex, navigating...");
-            router.push({
-              pathname: "/oauth/callback" as any,
-              params: { code, state },
-            });
-          } else {
-            console.error("[Auth] Could not extract code/state from URL");
-          }
-        }
-      }
-    } catch (error) {
-      console.error("[Auth] Login error:", error);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
+  const renderBusiness = ({ item }: { item: Business }) => (
+    <BusinessCard business={item} onPress={() => handleBusinessPress(item)} />
+  );
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
-      headerImage={
-        <Image
-          source={require("@/assets/images/partial-react-logo.png")}
-          style={styles.reactLogo}
-        />
-      }
-    >
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.authContainer}>
-        {loading ? (
-          <ActivityIndicator />
-        ) : isAuthenticated && user ? (
-          <ThemedView style={styles.userInfo}>
-            <ThemedText type="subtitle">Logged in as</ThemedText>
-            <ThemedText type="defaultSemiBold">{user.name || user.email || user.openId}</ThemedText>
-            <Pressable onPress={logout} style={styles.logoutButton}>
-              <ThemedText style={styles.logoutText}>Logout</ThemedText>
-            </Pressable>
-          </ThemedView>
-        ) : (
-          <Pressable
-            onPress={handleLogin}
-            disabled={isLoggingIn}
-            style={[styles.loginButton, isLoggingIn && styles.loginButtonDisabled]}
-          >
-            {isLoggingIn ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <ThemedText style={styles.loginText}>Login</ThemedText>
-            )}
-          </Pressable>
-        )}
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{" "}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: "cmd + d",
-              android: "cmd + m",
-              web: "F12",
-            })}
-          </ThemedText>{" "}
-          to open developer tools.
+    <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+        <ThemedText type="title" style={styles.title}>
+          GMB Audit
         </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert("Action pressed")} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert("Share pressed")}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert("Delete pressed")}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+        <ThemedText style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Search businesses to analyze
+        </ThemedText>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{" "}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{" "}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{" "}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <MaterialIcons name="search" size={22} color={colors.textSecondary} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder="Search businesses or categories..."
+            placeholderTextColor={colors.textDisabled}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={handleClearSearch} hitSlop={8}>
+              <MaterialIcons name="close" size={20} color={colors.textSecondary} />
+            </Pressable>
+          )}
+        </View>
+
+        <Pressable
+          style={[styles.searchButton, { backgroundColor: colors.tint }]}
+          onPress={handleSearch}
+        >
+          <ThemedText style={styles.searchButtonText}>Search</ThemedText>
+        </Pressable>
+      </View>
+
+      {hasSearched ? (
+        <View style={styles.resultsContainer}>
+          <View style={styles.resultsHeader}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              Results ({searchResults.length})
+            </ThemedText>
+            <Pressable onPress={handleClearSearch}>
+              <ThemedText style={[styles.clearText, { color: colors.tint }]}>Clear</ThemedText>
+            </Pressable>
+          </View>
+          {searchResults.length > 0 ? (
+            <FlatList
+              data={searchResults}
+              renderItem={renderBusiness}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          ) : (
+            <View style={styles.emptyState}>
+              <MaterialIcons name="search-off" size={48} color={colors.textDisabled} />
+              <ThemedText style={[styles.emptyText, { color: colors.textSecondary }]}>
+                No businesses found for "{searchQuery}"
+              </ThemedText>
+              <ThemedText style={[styles.emptyHint, { color: colors.textDisabled }]}>
+                Try searching for "dentist", "plumber", or "yoga"
+              </ThemedText>
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={styles.recentContainer}>
+          {searches.length > 0 ? (
+            <>
+              <View style={styles.recentHeader}>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>
+                  Recent Searches
+                </ThemedText>
+                <Pressable onPress={clearSearches}>
+                  <ThemedText style={[styles.clearText, { color: colors.tint }]}>Clear All</ThemedText>
+                </Pressable>
+              </View>
+              <FlatList
+                data={searches}
+                renderItem={renderRecentSearch}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+              />
+            </>
+          ) : (
+            <View style={styles.welcomeContainer}>
+              <MaterialIcons name="business" size={64} color={colors.tintLight} />
+              <ThemedText type="subtitle" style={styles.welcomeTitle}>
+                Welcome to GMB Audit
+              </ThemedText>
+              <ThemedText style={[styles.welcomeText, { color: colors.textSecondary }]}>
+                Search for any business to view categories, analyze reviews, and compare competitors.
+              </ThemedText>
+              <View style={styles.suggestionsContainer}>
+                <ThemedText style={[styles.suggestionsLabel, { color: colors.textSecondary }]}>
+                  Try searching:
+                </ThemedText>
+                <View style={styles.suggestionChips}>
+                  {["dentist", "auto repair", "yoga", "plumber"].map((term) => (
+                    <Pressable
+                      key={term}
+                      style={[styles.suggestionChip, { backgroundColor: colors.tintLight }]}
+                      onPress={() => handleRecentSearchPress(term)}
+                    >
+                      <ThemedText style={[styles.suggestionText, { color: colors.tint }]}>
+                        {term}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+  },
+  title: {
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 15,
+    marginBottom: Spacing.lg,
+    lineHeight: 20,
+  },
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-  },
-  authContainer: {
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
-  },
-  userInfo: {
-    gap: 8,
-    alignItems: "center",
-  },
-  loginButton: {
-    backgroundColor: "#007AFF",
+    paddingHorizontal: 12,
     paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    marginLeft: 8,
+    marginRight: 8,
+  },
+  searchButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
   },
-  loginButtonDisabled: {
-    opacity: 0.6,
-  },
-  loginText: {
-    color: "#fff",
+  searchButtonText: {
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
-  logoutButton: {
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    backgroundColor: "rgba(255, 59, 48, 0.1)",
+  resultsContainer: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
   },
-  logoutText: {
-    color: "#FF3B30",
+  resultsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+  },
+  clearText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  listContent: {
+    paddingBottom: 20,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 16,
+    lineHeight: 22,
+  },
+  emptyHint: {
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  recentContainer: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
+  },
+  recentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  recentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  recentTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  recentQuery: {
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  recentMeta: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  welcomeContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  welcomeTitle: {
+    marginTop: 16,
+    textAlign: "center",
+  },
+  welcomeText: {
+    fontSize: 15,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 22,
+  },
+  suggestionsContainer: {
+    marginTop: 24,
+    alignItems: "center",
+  },
+  suggestionsLabel: {
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  suggestionChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+  },
+  suggestionChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  suggestionText: {
     fontSize: 14,
     fontWeight: "500",
   },
