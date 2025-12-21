@@ -1,18 +1,27 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   TextInput,
   View,
 } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BusinessCard } from "@/components/ui/business-card";
+import { BusinessCardSkeleton } from "@/components/ui/skeleton";
 import { Colors, Spacing } from "@/constants/theme";
 import { Business, mockBusinesses, searchBusinesses } from "@/data/mock-businesses";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -27,25 +36,58 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Business[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { searches, addSearch, deleteSearch, clearSearches } = useRecentSearches();
 
-  const handleSearch = useCallback(() => {
+  // Animation values
+  const searchBarScale = useSharedValue(1);
+  const welcomeOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    welcomeOpacity.value = withTiming(1, { duration: 500 });
+  }, [welcomeOpacity]);
+
+  const welcomeAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: welcomeOpacity.value,
+  }));
+
+  const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsSearching(true);
+    
+    // Simulate network delay for better UX
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    
     const results = searchBusinesses(searchQuery);
     setSearchResults(results);
     setHasSearched(true);
+    setIsSearching(false);
     addSearch(searchQuery, results.length);
+    
+    if (results.length > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
   }, [searchQuery, addSearch]);
 
-  const handleRecentSearchPress = useCallback((query: string) => {
+  const handleRecentSearchPress = useCallback(async (query: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSearchQuery(query);
+    setIsSearching(true);
+    
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    
     const results = searchBusinesses(query);
     setSearchResults(results);
     setHasSearched(true);
+    setIsSearching(false);
   }, []);
 
   const handleBusinessPress = useCallback((business: Business) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/business/[id]",
       params: { id: business.id },
@@ -53,10 +95,36 @@ export default function HomeScreen() {
   }, [router]);
 
   const handleClearSearch = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSearchQuery("");
     setSearchResults([]);
     setHasSearched(false);
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    
+    const results = searchBusinesses(searchQuery);
+    setSearchResults(results);
+    setRefreshing(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [searchQuery]);
+
+  const handleSearchFocus = useCallback(() => {
+    searchBarScale.value = withSpring(1.02, { damping: 15 });
+  }, [searchBarScale]);
+
+  const handleSearchBlur = useCallback(() => {
+    searchBarScale.value = withSpring(1, { damping: 15 });
+  }, [searchBarScale]);
+
+  const searchBarAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: searchBarScale.value }],
+  }));
 
   const renderRecentSearch = ({ item }: { item: typeof searches[0] }) => (
     <Pressable
@@ -80,6 +148,14 @@ export default function HomeScreen() {
     <BusinessCard business={item} onPress={() => handleBusinessPress(item)} />
   );
 
+  const renderSkeletons = () => (
+    <View>
+      <BusinessCardSkeleton />
+      <BusinessCardSkeleton />
+      <BusinessCardSkeleton />
+    </View>
+  );
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
@@ -90,23 +166,27 @@ export default function HomeScreen() {
           Search businesses to analyze
         </ThemedText>
 
-        <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <MaterialIcons name="search" size={22} color={colors.textSecondary} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder="Search businesses or categories..."
-            placeholderTextColor={colors.textDisabled}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearch}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={handleClearSearch} hitSlop={8}>
-              <MaterialIcons name="close" size={20} color={colors.textSecondary} />
-            </Pressable>
-          )}
-        </View>
+        <Animated.View style={searchBarAnimatedStyle}>
+          <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <MaterialIcons name="search" size={22} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholder="Search businesses or categories..."
+              placeholderTextColor={colors.textDisabled}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
+              onFocus={handleSearchFocus}
+              onBlur={handleSearchBlur}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={handleClearSearch} hitSlop={8}>
+                <MaterialIcons name="close" size={20} color={colors.textSecondary} />
+              </Pressable>
+            )}
+          </View>
+        </Animated.View>
 
         <Pressable
           style={[styles.searchButton, { backgroundColor: colors.tint }]}
@@ -126,13 +206,23 @@ export default function HomeScreen() {
               <ThemedText style={[styles.clearText, { color: colors.tint }]}>Clear</ThemedText>
             </Pressable>
           </View>
-          {searchResults.length > 0 ? (
+          {isSearching ? (
+            renderSkeletons()
+          ) : searchResults.length > 0 ? (
             <FlatList
               data={searchResults}
               renderItem={renderBusiness}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={colors.tint}
+                  colors={[colors.tint]}
+                />
+              }
             />
           ) : (
             <View style={styles.emptyState}>
@@ -167,8 +257,10 @@ export default function HomeScreen() {
               />
             </>
           ) : (
-            <View style={styles.welcomeContainer}>
-              <MaterialIcons name="business" size={64} color={colors.tintLight} />
+            <Animated.View style={[styles.welcomeContainer, welcomeAnimatedStyle]}>
+              <View style={[styles.welcomeIcon, { backgroundColor: colors.tintLight }]}>
+                <MaterialIcons name="business" size={48} color={colors.tint} />
+              </View>
               <ThemedText type="subtitle" style={styles.welcomeTitle}>
                 Welcome to GMB Audit
               </ThemedText>
@@ -193,7 +285,7 @@ export default function HomeScreen() {
                   ))}
                 </View>
               </View>
-            </View>
+            </Animated.View>
           )}
         </View>
       )}
@@ -316,8 +408,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 32,
   },
+  welcomeIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
   welcomeTitle: {
-    marginTop: 16,
     textAlign: "center",
   },
   welcomeText: {

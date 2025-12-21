@@ -1,6 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   Alert,
   Pressable,
@@ -8,16 +9,25 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { CategoryBadge } from "@/components/ui/category-badge";
-import { RatingDisplay } from "@/components/ui/rating-display";
+import { ScoreRing } from "@/components/ui/score-ring";
+import { StatCard } from "@/components/ui/stat-card";
 import { Colors, Spacing } from "@/constants/theme";
 import { mockBusinesses } from "@/data/mock-businesses";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCompareList, useSavedAudits } from "@/hooks/use-local-storage";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function BusinessDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,6 +38,24 @@ export default function BusinessDetailScreen() {
 
   const { saveAudit, isBusinessSaved } = useSavedAudits();
   const { addToCompare, isInCompareList, compareList } = useCompareList();
+
+  // Animation values
+  const headerOpacity = useSharedValue(0);
+  const contentScale = useSharedValue(0.95);
+
+  useEffect(() => {
+    headerOpacity.value = withSpring(1);
+    contentScale.value = withDelay(100, withSpring(1, { damping: 15 }));
+  }, [headerOpacity, contentScale]);
+
+  const headerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: headerOpacity.value,
+  }));
+
+  const contentAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: contentScale.value }],
+    opacity: contentScale.value,
+  }));
 
   const business = useMemo(() => {
     return mockBusinesses.find((b) => b.id === id);
@@ -43,30 +71,36 @@ export default function BusinessDetailScreen() {
 
   const handleSaveAudit = useCallback(async () => {
     if (!business) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isSaved) {
       Alert.alert("Already Saved", "This business audit is already saved.");
       return;
     }
     await saveAudit(business);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert("Saved", "Business audit saved successfully!");
   }, [business, isSaved, saveAudit]);
 
   const handleAddToCompare = useCallback(async () => {
     if (!business) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (inCompare) {
       Alert.alert("Already Added", "This business is already in your comparison list.");
       return;
     }
     const success = await addToCompare(business);
     if (success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Added", "Business added to comparison list.");
     } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Limit Reached", "You can compare up to 4 businesses at a time.");
     }
   }, [business, inCompare, addToCompare]);
 
   const handleCategoryAnalysis = useCallback(() => {
     if (!business) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/business/categories",
       params: { id: business.id },
@@ -75,6 +109,7 @@ export default function BusinessDetailScreen() {
 
   const handleReviewAudit = useCallback(() => {
     if (!business) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/business/reviews",
       params: { id: business.id },
@@ -82,6 +117,7 @@ export default function BusinessDetailScreen() {
   }, [business, router]);
 
   const handleCompare = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push("/compare");
   }, [router]);
 
@@ -94,7 +130,10 @@ export default function BusinessDetailScreen() {
           </Pressable>
         </View>
         <View style={styles.errorContainer}>
-          <ThemedText>Business not found</ThemedText>
+          <MaterialIcons name="error-outline" size={64} color={colors.textDisabled} />
+          <ThemedText style={[styles.errorText, { color: colors.textSecondary }]}>
+            Business not found
+          </ThemedText>
         </View>
       </ThemedView>
     );
@@ -102,7 +141,13 @@ export default function BusinessDetailScreen() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16), backgroundColor: colors.surface }]}>
+      <Animated.View
+        style={[
+          styles.header,
+          { paddingTop: Math.max(insets.top, 16), backgroundColor: colors.surface },
+          headerAnimatedStyle,
+        ]}
+      >
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
@@ -110,203 +155,215 @@ export default function BusinessDetailScreen() {
           Business Details
         </ThemedText>
         <View style={styles.headerRight} />
-      </View>
+      </Animated.View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Business Info Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <ThemedText type="title" style={styles.businessName}>
-            {business.name}
-          </ThemedText>
-          <RatingDisplay
-            rating={business.rating}
-            reviewCount={business.reviewCount}
-            size="large"
-          />
-          <View style={styles.addressRow}>
-            <MaterialIcons name="location-on" size={18} color={colors.textSecondary} />
-            <ThemedText style={[styles.addressText, { color: colors.textSecondary }]}>
-              {business.address}
-            </ThemedText>
-          </View>
-          <View style={styles.contactRow}>
-            <MaterialIcons name="phone" size={18} color={colors.textSecondary} />
-            <ThemedText style={[styles.contactText, { color: colors.textSecondary }]}>
-              {business.phone}
-            </ThemedText>
-          </View>
-        </View>
-
-        {/* Categories Section */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Categories
-          </ThemedText>
-          <View style={styles.categoriesContainer}>
-            <CategoryBadge category={business.primaryCategory} isPrimary />
-            {business.secondaryCategories.map((cat, index) => (
-              <CategoryBadge key={index} category={cat} />
-            ))}
-          </View>
-        </View>
-
-        {/* Quick Stats */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Quick Stats
-          </ThemedText>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <ThemedText style={[styles.statValue, { color: colors.tint }]}>
-                {business.reviewCount}
-              </ThemedText>
-              <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Reviews
+        <Animated.View style={contentAnimatedStyle}>
+          {/* Hero Card with Score Ring */}
+          <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.heroContent}>
+              <View style={styles.heroLeft}>
+                <ThemedText type="title" style={styles.businessName}>
+                  {business.name}
+                </ThemedText>
+                <View style={styles.addressRow}>
+                  <MaterialIcons name="location-on" size={16} color={colors.textSecondary} />
+                  <ThemedText style={[styles.addressText, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {business.address}
+                  </ThemedText>
+                </View>
+                <View style={styles.contactRow}>
+                  <MaterialIcons name="phone" size={16} color={colors.textSecondary} />
+                  <ThemedText style={[styles.contactText, { color: colors.textSecondary }]}>
+                    {business.phone}
+                  </ThemedText>
+                </View>
+              </View>
+              <ScoreRing
+                score={business.rating}
+                maxScore={5}
+                size={90}
+                strokeWidth={8}
+                label="Rating"
+                delay={300}
+              />
+            </View>
+            <View style={styles.reviewCountBadge}>
+              <MaterialIcons name="rate-review" size={14} color={colors.tint} />
+              <ThemedText style={[styles.reviewCountText, { color: colors.tint }]}>
+                {business.reviewCount.toLocaleString()} reviews
               </ThemedText>
             </View>
-            <View style={styles.statItem}>
-              <ThemedText style={[styles.statValue, { color: colors.tint }]}>
-                {business.secondaryCategories.length + 1}
-              </ThemedText>
-              <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>
+          </View>
+
+          {/* Categories Section */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="label" size={20} color={colors.tint} />
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
                 Categories
               </ThemedText>
             </View>
-            <View style={styles.statItem}>
-              <ThemedText style={[styles.statValue, { color: colors.tint }]}>
-                {business.services.length}
+            <View style={styles.categoriesContainer}>
+              <CategoryBadge category={business.primaryCategory} isPrimary />
+              {business.secondaryCategories.map((cat, index) => (
+                <CategoryBadge key={index} category={cat} />
+              ))}
+            </View>
+          </View>
+
+          {/* Quick Stats with Animation */}
+          <View style={styles.statsRow}>
+            <StatCard
+              icon="rate-review"
+              label="Reviews"
+              value={business.reviewCount}
+              delay={0}
+            />
+            <StatCard
+              icon="label"
+              label="Categories"
+              value={business.secondaryCategories.length + 1}
+              delay={100}
+            />
+            <StatCard
+              icon="build"
+              label="Services"
+              value={business.services.length}
+              delay={200}
+            />
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionsContainer}>
+            <AnimatedPressable
+              style={[styles.actionButton, { backgroundColor: colors.tint }]}
+              onPress={handleCategoryAnalysis}
+            >
+              <MaterialIcons name="analytics" size={20} color="#FFFFFF" />
+              <ThemedText style={styles.actionButtonText}>Category Analysis</ThemedText>
+              <MaterialIcons name="chevron-right" size={20} color="#FFFFFF" />
+            </AnimatedPressable>
+
+            <AnimatedPressable
+              style={[styles.actionButton, { backgroundColor: colors.tint }]}
+              onPress={handleReviewAudit}
+            >
+              <MaterialIcons name="insights" size={20} color="#FFFFFF" />
+              <ThemedText style={styles.actionButtonText}>Review Audit</ThemedText>
+              <MaterialIcons name="chevron-right" size={20} color="#FFFFFF" />
+            </AnimatedPressable>
+
+            <View style={styles.secondaryActions}>
+              <Pressable
+                style={[
+                  styles.secondaryButton,
+                  { backgroundColor: colors.surface, borderColor: colors.tint },
+                  isSaved && { backgroundColor: colors.tintLight },
+                ]}
+                onPress={handleSaveAudit}
+              >
+                <MaterialIcons
+                  name={isSaved ? "bookmark" : "bookmark-border"}
+                  size={20}
+                  color={colors.tint}
+                />
+                <ThemedText style={[styles.secondaryButtonText, { color: colors.tint }]}>
+                  {isSaved ? "Saved" : "Save"}
+                </ThemedText>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.secondaryButton,
+                  { backgroundColor: colors.surface, borderColor: colors.tint },
+                  inCompare && { backgroundColor: colors.tintLight },
+                ]}
+                onPress={handleAddToCompare}
+              >
+                <MaterialIcons
+                  name={inCompare ? "check" : "compare-arrows"}
+                  size={20}
+                  color={colors.tint}
+                />
+                <ThemedText style={[styles.secondaryButtonText, { color: colors.tint }]}>
+                  {inCompare ? "Added" : "Compare"}
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {compareList.length > 1 && (
+              <Pressable
+                style={[styles.compareButton, { backgroundColor: colors.success }]}
+                onPress={handleCompare}
+              >
+                <MaterialIcons name="compare-arrows" size={20} color="#FFFFFF" />
+                <ThemedText style={styles.actionButtonText}>
+                  View Comparison ({compareList.length})
+                </ThemedText>
+              </Pressable>
+            )}
+          </View>
+
+          {/* Business IDs */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="fingerprint" size={20} color={colors.tint} />
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
+                Business IDs
               </ThemedText>
-              <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>
+            </View>
+            <View style={styles.idContainer}>
+              <View style={[styles.idItem, { backgroundColor: colors.background }]}>
+                <ThemedText style={[styles.idLabel, { color: colors.textSecondary }]}>Place ID</ThemedText>
+                <ThemedText style={styles.idValue} numberOfLines={1}>{business.placeId}</ThemedText>
+              </View>
+              <View style={[styles.idItem, { backgroundColor: colors.background }]}>
+                <ThemedText style={[styles.idLabel, { color: colors.textSecondary }]}>CID</ThemedText>
+                <ThemedText style={styles.idValue}>{business.cid}</ThemedText>
+              </View>
+            </View>
+          </View>
+
+          {/* Services */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="build" size={20} color={colors.tint} />
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
                 Services
               </ThemedText>
             </View>
-            <View style={styles.statItem}>
-              <ThemedText style={[styles.statValue, { color: colors.tint }]}>
-                {business.posts.length}
-              </ThemedText>
-              <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Posts
-              </ThemedText>
+            <View style={styles.servicesList}>
+              {business.services.map((service, index) => (
+                <View key={index} style={styles.serviceItem}>
+                  <MaterialIcons name="check-circle" size={16} color={colors.success} />
+                  <ThemedText style={styles.serviceText}>{service}</ThemedText>
+                </View>
+              ))}
             </View>
           </View>
-        </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-          <Pressable
-            style={[styles.actionButton, { backgroundColor: colors.tint }]}
-            onPress={handleCategoryAnalysis}
-          >
-            <MaterialIcons name="label" size={20} color="#FFFFFF" />
-            <ThemedText style={styles.actionButtonText}>Category Analysis</ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[styles.actionButton, { backgroundColor: colors.tint }]}
-            onPress={handleReviewAudit}
-          >
-            <MaterialIcons name="rate-review" size={20} color="#FFFFFF" />
-            <ThemedText style={styles.actionButtonText}>Review Audit</ThemedText>
-          </Pressable>
-
-          <View style={styles.secondaryActions}>
-            <Pressable
-              style={[
-                styles.secondaryButton,
-                { backgroundColor: colors.surface, borderColor: colors.tint },
-                isSaved && { backgroundColor: colors.tintLight },
-              ]}
-              onPress={handleSaveAudit}
-            >
-              <MaterialIcons
-                name={isSaved ? "bookmark" : "bookmark-border"}
-                size={20}
-                color={colors.tint}
-              />
-              <ThemedText style={[styles.secondaryButtonText, { color: colors.tint }]}>
-                {isSaved ? "Saved" : "Save Audit"}
+          {/* Attributes */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="verified" size={20} color={colors.tint} />
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
+                Attributes
               </ThemedText>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.secondaryButton,
-                { backgroundColor: colors.surface, borderColor: colors.tint },
-                inCompare && { backgroundColor: colors.tintLight },
-              ]}
-              onPress={handleAddToCompare}
-            >
-              <MaterialIcons
-                name={inCompare ? "check" : "compare-arrows"}
-                size={20}
-                color={colors.tint}
-              />
-              <ThemedText style={[styles.secondaryButtonText, { color: colors.tint }]}>
-                {inCompare ? "Added" : "Compare"}
-              </ThemedText>
-            </Pressable>
+            </View>
+            <View style={styles.attributesList}>
+              {business.attributes.map((attr, index) => (
+                <View key={index} style={[styles.attributeChip, { backgroundColor: colors.tintLight }]}>
+                  <ThemedText style={[styles.attributeText, { color: colors.tint }]}>{attr}</ThemedText>
+                </View>
+              ))}
+            </View>
           </View>
-
-          {compareList.length > 1 && (
-            <Pressable
-              style={[styles.compareButton, { backgroundColor: colors.success }]}
-              onPress={handleCompare}
-            >
-              <MaterialIcons name="compare-arrows" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.actionButtonText}>
-                View Comparison ({compareList.length})
-              </ThemedText>
-            </Pressable>
-          )}
-        </View>
-
-        {/* Business IDs */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Business IDs
-          </ThemedText>
-          <View style={styles.idRow}>
-            <ThemedText style={[styles.idLabel, { color: colors.textSecondary }]}>Place ID:</ThemedText>
-            <ThemedText style={styles.idValue} numberOfLines={1}>{business.placeId}</ThemedText>
-          </View>
-          <View style={styles.idRow}>
-            <ThemedText style={[styles.idLabel, { color: colors.textSecondary }]}>CID:</ThemedText>
-            <ThemedText style={styles.idValue}>{business.cid}</ThemedText>
-          </View>
-        </View>
-
-        {/* Services */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Services
-          </ThemedText>
-          <View style={styles.servicesList}>
-            {business.services.map((service, index) => (
-              <View key={index} style={styles.serviceItem}>
-                <MaterialIcons name="check-circle" size={16} color={colors.success} />
-                <ThemedText style={styles.serviceText}>{service}</ThemedText>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Attributes */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Attributes
-          </ThemedText>
-          <View style={styles.attributesList}>
-            {business.attributes.map((attr, index) => (
-              <View key={index} style={[styles.attributeChip, { backgroundColor: colors.tintLight }]}>
-                <ThemedText style={[styles.attributeText, { color: colors.tint }]}>{attr}</ThemedText>
-              </View>
-            ))}
-          </View>
-        </View>
+        </Animated.View>
       </ScrollView>
     </ThemedView>
   );
@@ -340,11 +397,67 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  errorText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
   scrollView: {
     flex: 1,
   },
   content: {
     padding: Spacing.lg,
+  },
+  heroCard: {
+    padding: Spacing.lg,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  heroContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  heroLeft: {
+    flex: 1,
+    marginRight: 16,
+  },
+  businessName: {
+    fontSize: 22,
+    marginBottom: 8,
+    lineHeight: 28,
+  },
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 6,
+  },
+  addressText: {
+    marginLeft: 6,
+    fontSize: 13,
+    flex: 1,
+    lineHeight: 18,
+  },
+  contactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  contactText: {
+    marginLeft: 6,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  reviewCountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.05)",
+  },
+  reviewCountText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: "600",
   },
   card: {
     padding: Spacing.lg,
@@ -352,34 +465,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 16,
   },
-  businessName: {
-    fontSize: 24,
-    marginBottom: 8,
-    lineHeight: 30,
-  },
-  addressRow: {
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
-  },
-  addressText: {
-    marginLeft: 8,
-    fontSize: 14,
-    flex: 1,
-    lineHeight: 20,
-  },
-  contactRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  contactText: {
-    marginLeft: 8,
-    fontSize: 14,
-    lineHeight: 20,
+    marginBottom: 12,
   },
   sectionTitle: {
-    marginBottom: 12,
+    marginLeft: 8,
     fontSize: 17,
   },
   categoriesContainer: {
@@ -387,20 +479,10 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
-  statsGrid: {
+  statsRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
-  },
-  statItem: {
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  statLabel: {
-    fontSize: 12,
-    marginTop: 4,
+    gap: 12,
+    marginBottom: 16,
   },
   actionsContainer: {
     marginBottom: 16,
@@ -408,16 +490,18 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
     paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 12,
     marginBottom: 10,
   },
   actionButtonText: {
+    flex: 1,
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
-    marginLeft: 8,
+    marginLeft: 10,
   },
   secondaryActions: {
     flexDirection: "row",
@@ -445,27 +529,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 10,
   },
-  idRow: {
-    flexDirection: "row",
-    marginBottom: 8,
+  idContainer: {
+    gap: 8,
+  },
+  idItem: {
+    padding: 12,
+    borderRadius: 8,
   },
   idLabel: {
-    width: 70,
-    fontSize: 14,
+    fontSize: 12,
+    marginBottom: 4,
   },
   idValue: {
-    flex: 1,
-    fontSize: 14,
+    fontSize: 13,
+    fontFamily: "monospace",
   },
   servicesList: {
-    gap: 8,
+    gap: 10,
   },
   serviceItem: {
     flexDirection: "row",
     alignItems: "center",
   },
   serviceText: {
-    marginLeft: 8,
+    marginLeft: 10,
     fontSize: 14,
     lineHeight: 20,
   },
