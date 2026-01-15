@@ -1,0 +1,100 @@
+{
+    "project": {
+        "name": "gmb-everywhere-mobile",
+        "description": "React Native + Expo mobile app for Google My Business management",
+        "repository": {
+            "url": "https://github.com/yjones-coder/gmb-everywhere-mobile.git",
+            "type": "git"
+        },
+        "language": "typescript",
+        "framework": "react-native"
+    },
+    "indexing": {
+        "enabled": true,
+        "semantic_search": true,
+        "ai_assisted_development": true,
+        "include": [
+            "**/*.ts",
+            "**/*.tsx",
+            "**/*.js",
+            "**/*.jsx",
+            "**/*.json",
+            "**/*.md",
+            "*.config.ts",
+            "*.config.js",
+            "*.config.cjs",
+            "app.config.ts",
+            "tsconfig.json",
+            "package.json",
+            "README.md",
+            "SECURITY.md",
+            "design.md",
+            "implementation.md",
+            "todo.md"
+        ],
+        "exclude": [
+            "**/node_modules/**",
+            "**/.expo/**",
+            "**/.expo-shared/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.next/**",
+            "**/coverage/**",
+            "**/*.test.ts",
+            "**/*.test.tsx",
+            "**/*.spec.ts",
+            "**/*.spec.tsx",
+            "**/__tests__/**",
+            "**/tests/**",
+            "**/assets/images/**",
+            "**/assets/fonts/**",
+            "**/*.png",
+            "**/*.jpg",
+            "**/*.jpeg",
+            "**/*.gif",
+            "**/*.svg",
+            "**/*.ico",
+            "**/*.ttf",
+            "**/*.woff",
+            "**/*.woff2",
+            "**/*.eot",
+            "**/temp_processing/**",
+            "**/.git/**",
+            "**/.vscode/**",
+            "**/pnpm-lock.yaml",
+            "**/package-lock.json",
+            "**/yarn.lock"
+        ],
+        "priority_paths": [
+            "app/**",
+            "components/**",
+            "hooks/**",
+            "lib/**",
+            "server/**",
+            "shared/**",
+            "constants/**"
+        ],
+        "max_file_size_kb": 500,
+        "follow_symlinks": false
+    },
+    "features": {
+        "code_completion": true,
+        "code_navigation": true,
+        "refactoring_suggestions": true,
+        "documentation_generation": true,
+        "type_inference": true,
+        "import_optimization": true
+    },
+    "react_native": {
+        "platform_specific_files": true,
+        "expo_config": true,
+        "metro_bundler": true,
+        "native_modules": true
+    },
+    "optimization": {
+        "incremental_indexing": true,
+        "cache_enabled": true,
+        "parallel_processing": true,
+        "index_on_save": true
+    }
+}
