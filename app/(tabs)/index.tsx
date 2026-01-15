@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  Alert,
 } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -26,6 +27,7 @@ import { Colors, Spacing } from "@/constants/theme";
 import { Business, mockBusinesses, searchBusinesses } from "@/data/mock-businesses";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useRecentSearches } from "@/hooks/use-local-storage";
+import { trpc } from "@/lib/trpc";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -38,8 +40,12 @@ export default function HomeScreen() {
   const [hasSearched, setHasSearched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const { searches, addSearch, deleteSearch, clearSearches } = useRecentSearches();
+
+  // tRPC mutation for searching businesses
+  const searchMutation = trpc.gmb.search.useMutation();
 
   // Animation values
   const searchBarScale = useSharedValue(1);
@@ -55,36 +61,97 @@ export default function HomeScreen() {
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
-    
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsSearching(true);
-    
-    // Simulate network delay for better UX
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    
-    const results = searchBusinesses(searchQuery);
-    setSearchResults(results);
-    setHasSearched(true);
-    setIsSearching(false);
-    addSearch(searchQuery, results.length);
-    
-    if (results.length > 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setSearchError(null);
+
+    try {
+      // Use real Google Places API via tRPC
+      const result = await searchMutation.mutateAsync({
+        query: searchQuery,
+      });
+
+      if (result.status === "error") {
+        // Show error and fall back to mock data
+        setSearchError(result.error || "Search failed. Using mock data.");
+        const mockResults = searchBusinesses(searchQuery);
+        setSearchResults(mockResults);
+        setHasSearched(true);
+        addSearch(searchQuery, mockResults.length);
+
+        if (mockResults.length > 0) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+      } else if (result.status === "no_results") {
+        setSearchResults([]);
+        setHasSearched(true);
+        addSearch(searchQuery, 0);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      } else {
+        // Success with real data
+        setSearchResults(result.businesses);
+        setHasSearched(true);
+        addSearch(searchQuery, result.businesses.length);
+
+        if (result.businesses.length > 0) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+      }
+    } catch (error) {
+      // Fallback to mock data on any error
+      console.error("Search error, falling back to mock:", error);
+      setSearchError("Connection error. Using mock data.");
+      const mockResults = searchBusinesses(searchQuery);
+      setSearchResults(mockResults);
+      setHasSearched(true);
+      addSearch(searchQuery, mockResults.length);
+
+      if (mockResults.length > 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } finally {
+      setIsSearching(false);
     }
-  }, [searchQuery, addSearch]);
+  }, [searchQuery, addSearch, searchMutation]);
 
   const handleRecentSearchPress = useCallback(async (query: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSearchQuery(query);
     setIsSearching(true);
-    
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    
-    const results = searchBusinesses(query);
-    setSearchResults(results);
-    setHasSearched(true);
-    setIsSearching(false);
-  }, []);
+    setSearchError(null);
+
+    try {
+      const result = await searchMutation.mutateAsync({
+        query,
+      });
+
+      if (result.status === "error") {
+        setSearchError(result.error || "Search failed. Using mock data.");
+        const mockResults = searchBusinesses(query);
+        setSearchResults(mockResults);
+        setHasSearched(true);
+      } else if (result.status === "no_results") {
+        setSearchResults([]);
+        setHasSearched(true);
+      } else {
+        setSearchResults(result.businesses);
+        setHasSearched(true);
+      }
+    } catch (error) {
+      console.error("Recent search error, falling back to mock:", error);
+      setSearchError("Connection error. Using mock data.");
+      const mockResults = searchBusinesses(query);
+      setSearchResults(mockResults);
+      setHasSearched(true);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchMutation]);
 
   const handleBusinessPress = useCallback((business: Business) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -99,20 +166,39 @@ export default function HomeScreen() {
     setSearchQuery("");
     setSearchResults([]);
     setHasSearched(false);
+    setSearchError(null);
   }, []);
 
   const handleRefresh = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setRefreshing(true);
+    setSearchError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    
-    const results = searchBusinesses(searchQuery);
-    setSearchResults(results);
-    setRefreshing(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [searchQuery]);
+
+    try {
+      const result = await searchMutation.mutateAsync({
+        query: searchQuery,
+      });
+
+      if (result.status === "error") {
+        setSearchError(result.error || "Search failed. Using mock data.");
+        const mockResults = searchBusinesses(searchQuery);
+        setSearchResults(mockResults);
+      } else if (result.status === "no_results") {
+        setSearchResults([]);
+      } else {
+        setSearchResults(result.businesses);
+      }
+    } catch (error) {
+      console.error("Refresh error, falling back to mock:", error);
+      setSearchError("Connection error. Using mock data.");
+      const mockResults = searchBusinesses(searchQuery);
+      setSearchResults(mockResults);
+    } finally {
+      setRefreshing(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }, [searchQuery, searchMutation]);
 
   const handleSearchFocus = useCallback(() => {
     searchBarScale.value = withSpring(1.02, { damping: 15 });
@@ -206,6 +292,14 @@ export default function HomeScreen() {
               <ThemedText style={[styles.clearText, { color: colors.tint }]}>Clear</ThemedText>
             </Pressable>
           </View>
+          {searchError && (
+            <View style={[styles.errorBanner, { backgroundColor: colors.tintLight }]}>
+              <MaterialIcons name="warning" size={20} color={colors.tint} />
+              <ThemedText style={[styles.errorText, { color: colors.tint }]}>
+                {searchError}
+              </ThemedText>
+            </View>
+          )}
           {isSearching ? (
             renderSkeletons()
           ) : searchResults.length > 0 ? (
@@ -285,6 +379,13 @@ export default function HomeScreen() {
                   ))}
                 </View>
               </View>
+
+              <Pressable
+                style={[styles.gmbButton, { backgroundColor: colors.tint, marginTop: 24 }]}
+                onPress={() => router.push("/gmb")}
+              >
+                <ThemedText style={styles.gmbButtonText}>Go to GMB Audit Tools</ThemedText>
+              </Pressable>
             </Animated.View>
           )}
         </View>
@@ -300,9 +401,10 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.lg,
+    marginTop: 8, // Add a bit more breathing room at the top
   },
   title: {
-    marginBottom: 4,
+    marginBottom: 8, // More space after title
   },
   subtitle: {
     fontSize: 15,
@@ -328,6 +430,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
+    marginBottom: 8, // Spacing before results/recent
   },
   searchButtonText: {
     color: "#FFFFFF",
@@ -337,6 +440,7 @@ const styles = StyleSheet.create({
   resultsContainer: {
     flex: 1,
     paddingHorizontal: Spacing.lg,
+    paddingBottom: 80, // Prevent overlap with tab bar
   },
   resultsHeader: {
     flexDirection: "row",
@@ -359,6 +463,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
+    paddingBottom: 40,
   },
   emptyText: {
     fontSize: 16,
@@ -375,6 +480,7 @@ const styles = StyleSheet.create({
   recentContainer: {
     flex: 1,
     paddingHorizontal: Spacing.lg,
+    paddingBottom: 80, // Prevent overlap with tab bar
   },
   recentHeader: {
     flexDirection: "row",
@@ -407,6 +513,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
+    paddingBottom: 60, // Extra bottom padding for welcome state
   },
   welcomeIcon: {
     width: 100,
@@ -428,6 +535,7 @@ const styles = StyleSheet.create({
   suggestionsContainer: {
     marginTop: 24,
     alignItems: "center",
+    width: '100%', // Ensure it takes full width to allow wrapping
   },
   suggestionsLabel: {
     fontSize: 14,
@@ -447,5 +555,29 @@ const styles = StyleSheet.create({
   suggestionText: {
     fontSize: 14,
     fontWeight: "500",
+  },
+  gmbButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 14, // Match search button height
+    borderRadius: 12,
+    alignItems: "center",
+    width: '100%', // Make it more prominent like the search button
+  },
+  gmbButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+    gap: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

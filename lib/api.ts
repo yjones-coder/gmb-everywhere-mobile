@@ -7,6 +7,10 @@ type ApiResponse<T> = {
   error?: string;
 };
 
+/**
+ * Make an authenticated API call to the Google OAuth backend
+ * Handles both cookie-based (web) and Bearer token (native) authentication
+ */
 export async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -89,8 +93,10 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
   }
 }
 
-// OAuth callback handler - exchange code for session token
-// Calls /api/oauth/mobile endpoint which returns JSON with app_session_id and user
+/**
+ * Exchange Google OAuth authorization code for session token
+ * Calls /api/oauth/mobile endpoint which returns JSON with app_session_id and user
+ */
 export async function exchangeOAuthCode(
   code: string,
   state: string,
@@ -99,12 +105,12 @@ export async function exchangeOAuthCode(
   // Use GET with query params
   const params = new URLSearchParams({ code, state });
   const endpoint = `/api/oauth/mobile?${params.toString()}`;
-  console.log("[API] Calling OAuth mobile endpoint:", endpoint);
+  console.log("[API] Calling Google OAuth mobile endpoint:", endpoint);
   const result = await apiCall<{ app_session_id: string; user: any }>(endpoint);
 
   // Convert app_session_id to sessionToken for compatibility
   const sessionToken = result.app_session_id;
-  console.log("[API] OAuth exchange result:", {
+  console.log("[API] Google OAuth exchange result:", {
     hasSessionToken: !!sessionToken,
     hasUser: !!result.user,
     sessionToken: sessionToken ? `${sessionToken.substring(0, 50)}...` : null,
@@ -116,14 +122,19 @@ export async function exchangeOAuthCode(
   };
 }
 
-// Logout
+/**
+ * Logout from Google OAuth session
+ */
 export async function logout(): Promise<void> {
   await apiCall<void>("/api/auth/logout", {
     method: "POST",
   });
 }
 
-// Get current authenticated user (web uses cookie-based auth)
+/**
+ * Get current authenticated user
+ * Works with both cookie-based (web) and Bearer token (native) authentication
+ */
 export async function getMe(): Promise<{
   id: number;
   openId: string;
@@ -141,8 +152,10 @@ export async function getMe(): Promise<{
   }
 }
 
-// Establish session cookie on the backend (3000-xxx domain)
-// Called after receiving token via postMessage to get a proper Set-Cookie from the backend
+/**
+ * Establish session cookie on the backend
+ * Used by web platform to convert Bearer token to cookie-based auth
+ */
 export async function establishSession(token: string): Promise<boolean> {
   try {
     console.log("[API] establishSession: setting cookie on backend...");

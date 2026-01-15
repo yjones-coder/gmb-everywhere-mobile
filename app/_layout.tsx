@@ -34,7 +34,8 @@ export default function RootLayout() {
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
 
-  // Initialize Manus runtime for cookie injection from parent container
+  // Initialize runtime communication with parent container (if running in iframe)
+  // This handles safe area insets and signals when the app is ready
   useEffect(() => {
     initManusRuntime();
   }, []);

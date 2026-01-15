@@ -55,9 +55,6 @@ export default function SettingsScreen() {
     );
   }, [clearCompareList]);
 
-  const handleOpenGMBEverywhere = useCallback(() => {
-    Linking.openURL("https://www.gmbeverywhere.com/");
-  }, []);
 
   const SettingItem = ({
     icon,
@@ -150,12 +147,6 @@ export default function SettingsScreen() {
             ABOUT
           </ThemedText>
           <View style={[styles.sectionContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <SettingItem
-              icon="language"
-              title="GMB Everywhere Website"
-              subtitle="Visit the official website"
-              onPress={handleOpenGMBEverywhere}
-            />
             <SettingItem
               icon="info"
               title="App Version"

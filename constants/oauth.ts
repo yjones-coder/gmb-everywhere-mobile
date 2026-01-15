@@ -1,18 +1,18 @@
 import * as Linking from "expo-linking";
 import * as ReactNative from "react-native";
 
-// Extract scheme from bundle ID (last segment timestamp, prefixed with "manus")
-// e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
-const bundleId = "space.manus.gmb.everywhere.mobile.t20251218170041";
+// Extract scheme from bundle ID (last segment timestamp, prefixed with "google")
+// e.g., "com.google.my.app.t20240115103045" -> "google20240115103045"
+const bundleId = "com.google.gmb.everywhere.mobile.t20251218170041";
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
-const schemeFromBundleId = `manus${timestamp}`;
+const schemeFromBundleId = `google${timestamp}`;
 
 const env = {
-  portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL ?? "",
-  server: process.env.EXPO_PUBLIC_OAUTH_SERVER_URL ?? "",
-  appId: process.env.EXPO_PUBLIC_APP_ID ?? "",
-  ownerId: process.env.EXPO_PUBLIC_OWNER_OPEN_ID ?? "",
-  ownerName: process.env.EXPO_PUBLIC_OWNER_NAME ?? "",
+  portal: "https://accounts.google.com/o/oauth2/v2/auth",
+  server: "https://oauth2.googleapis.com/token",
+  appId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? "",
+  ownerId: "",
+  ownerName: "",
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "",
   deepLinkScheme: schemeFromBundleId,
 };
@@ -45,12 +45,12 @@ export function getApiBaseUrl(): string {
     }
   }
 
-  // Fallback to empty (will use relative URL)
-  return "";
+  // Fallback to localhost:3000 for standard local development
+  return "http://localhost:3000";
 }
-
 export const SESSION_TOKEN_KEY = "app_session_token";
-export const USER_INFO_KEY = "manus-runtime-user-info";
+
+export const USER_INFO_KEY = "google-oauth-user-info";
 
 const encodeState = (value: string) => {
   if (typeof globalThis.btoa === "function") {
@@ -80,11 +80,13 @@ export const getLoginUrl = () => {
 
   const state = encodeState(redirectUri);
 
-  const url = new URL(`${OAUTH_PORTAL_URL}/app-auth`);
-  url.searchParams.set("appId", APP_ID);
-  url.searchParams.set("redirectUri", redirectUri);
+  const url = new URL(OAUTH_PORTAL_URL);
+  url.searchParams.set("client_id", APP_ID);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("scope", "https://www.googleapis.com/auth/business.manage https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile");
+  url.searchParams.set("response_type", "code");
   url.searchParams.set("state", state);
-  url.searchParams.set("type", "signIn");
+  url.searchParams.set("access_type", "offline");
 
   return url.toString();
 };

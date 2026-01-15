@@ -7,11 +7,14 @@ const SAVED_AUDITS_KEY = "gmb_saved_audits";
 const RECENT_SEARCHES_KEY = "gmb_recent_searches";
 const COMPARE_LIST_KEY = "gmb_compare_list";
 
+export type LeadStatus = 'Prospect' | 'Contacted' | 'Qualified' | 'Closed' | 'Lost';
+
 export interface SavedAudit {
   id: string;
   business: Business;
   savedAt: number;
   notes?: string;
+  leadStatus?: LeadStatus;
 }
 
 export function useSavedAudits() {
@@ -35,12 +38,13 @@ export function useSavedAudits() {
     }
   };
 
-  const saveAudit = useCallback(async (business: Business, notes?: string) => {
+  const saveAudit = useCallback(async (business: Business, notes?: string, leadStatus: LeadStatus = 'Prospect') => {
     const newAudit: SavedAudit = {
       id: `audit_${Date.now()}`,
       business,
       savedAt: Date.now(),
       notes,
+      leadStatus,
     };
     const updated = [newAudit, ...audits];
     setAudits(updated);
@@ -54,11 +58,17 @@ export function useSavedAudits() {
     await AsyncStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
   }, [audits]);
 
+  const updateAudit = useCallback(async (id: string, updates: Partial<SavedAudit>) => {
+    const updated = audits.map((a) => (a.id === id ? { ...a, ...updates } : a));
+    setAudits(updated);
+    await AsyncStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
+  }, [audits]);
+
   const isBusinessSaved = useCallback((businessId: string) => {
     return audits.some((a) => a.business.id === businessId);
   }, [audits]);
 
-  return { audits, loading, saveAudit, deleteAudit, isBusinessSaved, refresh: loadAudits };
+  return { audits, loading, saveAudit, deleteAudit, updateAudit, isBusinessSaved, refresh: loadAudits };
 }
 
 export function useRecentSearches() {

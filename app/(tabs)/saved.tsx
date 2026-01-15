@@ -4,9 +4,10 @@ import { useCallback } from "react";
 import {
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
+  TouchableOpacity,
   View,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,7 +17,7 @@ import { CategoryBadge } from "@/components/ui/category-badge";
 import { RatingDisplay } from "@/components/ui/rating-display";
 import { Colors, Spacing } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { SavedAudit, useSavedAudits } from "@/hooks/use-local-storage";
+import { SavedAudit, useSavedAudits, type LeadStatus } from "@/hooks/use-local-storage";
 
 export default function SavedScreen() {
   const insets = useSafeAreaInsets();
@@ -24,7 +25,31 @@ export default function SavedScreen() {
   const colors = Colors[colorScheme ?? "light"];
   const router = useRouter();
 
-  const { audits, deleteAudit, loading } = useSavedAudits();
+  const { audits, deleteAudit, updateAudit, loading } = useSavedAudits();
+
+  const handleStatusChange = (audit: SavedAudit) => {
+    const statuses: LeadStatus[] = ['Prospect', 'Contacted', 'Qualified', 'Closed', 'Lost'];
+
+    // Simple alert-based picker for MVP
+    Alert.alert(
+      "Update Status",
+      "Current: " + (audit.leadStatus || 'Prospect'),
+      statuses.map(status => ({
+        text: status,
+        onPress: () => updateAudit(audit.id, { leadStatus: status })
+      }))
+    );
+  };
+
+  const handleEditNotes = (audit: SavedAudit) => {
+    // In a final app, this would be a modal. For the prototype, we use alert with input.
+    // Note: Alert.prompt is iOS only, for web/android we can use a basic alert or placeholder.
+    // For this prototype, we'll use a simple prompt simulation.
+    const newNotes = window.prompt("Edit Notes for " + audit.business.name, audit.notes || "");
+    if (newNotes !== null) {
+      updateAudit(audit.id, { notes: newNotes });
+    }
+  };
 
   const handleAuditPress = useCallback((audit: SavedAudit) => {
     router.push({
@@ -64,9 +89,17 @@ export default function SavedScreen() {
     >
       <View style={styles.cardHeader}>
         <View style={styles.cardInfo}>
-          <ThemedText type="defaultSemiBold" style={styles.businessName} numberOfLines={1}>
-            {item.business.name}
-          </ThemedText>
+          <View style={styles.nameRow}>
+            <ThemedText type="defaultSemiBold" style={styles.businessName} numberOfLines={1}>
+              {item.business.name}
+            </ThemedText>
+            <Pressable
+              onPress={() => handleStatusChange(item)}
+              style={[styles.statusBadge, { backgroundColor: getStatusColor(item.leadStatus, colors) }]}
+            >
+              <ThemedText style={styles.statusText}>{item.leadStatus || 'Prospect'}</ThemedText>
+            </Pressable>
+          </View>
           <ThemedText style={[styles.savedDate, { color: colors.textSecondary }]}>
             Saved {formatDate(item.savedAt)}
           </ThemedText>
@@ -108,9 +141,24 @@ export default function SavedScreen() {
             </ThemedText>
           </View>
         </View>
+
+        {item.notes ? (
+          <View style={[styles.notesContainer, { backgroundColor: colors.tintLight }]}>
+            <ThemedText style={[styles.notesText, { color: colors.textSecondary }]} numberOfLines={2}>
+              "{item.notes}"
+            </ThemedText>
+          </View>
+        ) : null}
       </View>
 
       <View style={[styles.cardFooter, { borderTopColor: colors.border }]}>
+        <TouchableOpacity onPress={() => handleEditNotes(item)} style={styles.notesButton}>
+          <MaterialIcons name="edit-note" size={20} color={colors.tint} />
+          <ThemedText style={[styles.viewDetails, { color: colors.tint, marginLeft: 4 }]}>
+            {item.notes ? "Edit Notes" : "Add Note"}
+          </ThemedText>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
         <ThemedText style={[styles.viewDetails, { color: colors.tint }]}>
           View Details
         </ThemedText>
@@ -118,6 +166,16 @@ export default function SavedScreen() {
       </View>
     </Pressable>
   );
+
+  const getStatusColor = (status: string | undefined, colors: any) => {
+    switch (status) {
+      case 'Closed': return '#4CAF50';
+      case 'Contacted': return '#2196F3';
+      case 'Qualified': return '#9C27B0';
+      case 'Lost': return '#F44336';
+      default: return colors.tint;
+    }
+  };
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -201,6 +259,23 @@ const styles = StyleSheet.create({
   businessName: {
     fontSize: 17,
     lineHeight: 22,
+    flex: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFF',
   },
   savedDate: {
     fontSize: 13,
@@ -265,4 +340,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 22,
   },
+  notesContainer: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFD700',
+  },
+  notesText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  notesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  }
 });

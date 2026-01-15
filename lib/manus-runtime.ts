@@ -1,11 +1,11 @@
 /**
- * Manus Runtime - Communication layer between Expo web app and parent container (next-agent-webapp)
+ * Runtime Communication - Communication layer between Expo web app and parent container
  *
- * Simplified flow:
- * 1. initManusRuntime() called
- * 2. Send 'appDevServerReady' to parent to signal app is ready
+ * This module handles:
+ * 1. Signaling to parent container when app is ready
+ * 2. Receiving safe area insets from parent container for proper UI layout
  *
- * User will manually login via the app's login page - no automatic cookie injection.
+ * Note: Authentication is handled separately via Google OAuth flow
  */
 
 import { Platform } from "react-native";
@@ -101,14 +101,14 @@ export function subscribeSafeAreaInsets(callback: SafeAreaCallback): () => void 
 }
 
 /**
- * Initialize Manus Runtime - just notifies parent that app is ready
+ * Initialize runtime communication - notifies parent container that app is ready
  */
 export function initManusRuntime(): void {
   if (!isWeb() || !isInIframe()) return;
   if (initialized) return;
   initialized = true;
 
-  log("initManusRuntime called");
+  log("Runtime communication initialized");
   window.addEventListener("message", handleMessage);
   sendToParent("appDevServerReady", {});
 }

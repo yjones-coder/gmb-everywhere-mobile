@@ -15,6 +15,7 @@ export interface Business {
   hours: { day: string; hours: string }[];
   reviews: Review[];
   posts: Post[];
+  photos?: { photoReference: string; width: number; height: number }[];
 }
 
 export interface Review {

@@ -44,12 +44,12 @@ function buildUserResponse(
   user:
     | Awaited<ReturnType<typeof getUserByOpenId>>
     | {
-        openId: string;
-        name?: string | null;
-        email?: string | null;
-        loginMethod?: string | null;
-        lastSignedIn?: Date | null;
-      },
+      openId: string;
+      name?: string | null;
+      email?: string | null;
+      loginMethod?: string | null;
+      lastSignedIn?: Date | null;
+    },
 ) {
   return {
     id: (user as any)?.id ?? null,
@@ -62,6 +62,7 @@ function buildUserResponse(
 }
 
 export function registerOAuthRoutes(app: Express) {
+  // Web OAuth callback - exchanges code for token, sets cookie, and redirects to frontend
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
@@ -72,9 +73,16 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
+      // Exchange authorization code for Google OAuth tokens
       const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+
+      // Get user info from Google using access token
+      const userInfo = await sdk.getUserInfo(tokenResponse.access_token);
+
+      // Sync user to database
       await syncUser(userInfo);
+
+      // Create session token
       const sessionToken = await sdk.createSessionToken(userInfo.openId!, {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,
@@ -96,6 +104,7 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
+  // Mobile OAuth callback - exchanges code for token and returns JSON with session token
   app.get("/api/oauth/mobile", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
@@ -106,10 +115,16 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
+      // Exchange authorization code for Google OAuth tokens
       const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+
+      // Get user info from Google using access token
+      const userInfo = await sdk.getUserInfo(tokenResponse.access_token);
+
+      // Sync user to database
       const user = await syncUser(userInfo);
 
+      // Create session token
       const sessionToken = await sdk.createSessionToken(userInfo.openId!, {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,

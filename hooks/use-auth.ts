@@ -7,6 +7,17 @@ type UseAuthOptions = {
   autoFetch?: boolean;
 };
 
+/**
+ * Authentication hook for Google OAuth
+ *
+ * Handles authentication state for both web and native platforms:
+ * - Web: Cookie-based authentication with API validation
+ * - Native: Token-based authentication with secure storage
+ *
+ * @param options - Configuration options
+ * @param options.autoFetch - Whether to automatically fetch user on mount (default: true)
+ * @returns Authentication state and methods
+ */
 export function useAuth(options?: UseAuthOptions) {
   const { autoFetch = true } = options ?? {};
   const [user, setUser] = useState<Auth.User | null>(null);
@@ -81,16 +92,21 @@ export function useAuth(options?: UseAuthOptions) {
   }, []);
 
   const logout = useCallback(async () => {
+    console.log("[useAuth] logout called");
     try {
+      // Call logout API to clear server-side session
       await Api.logout();
+      console.log("[useAuth] Logout API call successful");
     } catch (err) {
-      console.error("[Auth] Logout API call failed:", err);
+      console.error("[useAuth] Logout API call failed:", err);
       // Continue with logout even if API call fails
     } finally {
+      // Clear client-side session data
       await Auth.removeSessionToken();
       await Auth.clearUserInfo();
       setUser(null);
       setError(null);
+      console.log("[useAuth] Client-side session cleared");
     }
   }, []);
 
@@ -100,7 +116,7 @@ export function useAuth(options?: UseAuthOptions) {
     console.log("[useAuth] useEffect triggered, autoFetch:", autoFetch, "platform:", Platform.OS);
     if (autoFetch) {
       if (Platform.OS === "web") {
-        // Web: fetch user from API directly (user will login manually if needed)
+        // Web: fetch user from API directly (cookie-based auth)
         console.log("[useAuth] Web: fetching user from API...");
         fetchUser();
       } else {

@@ -1,7 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -22,10 +22,12 @@ import { ThemedView } from "@/components/themed-view";
 import { CategoryBadge } from "@/components/ui/category-badge";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { StatCard } from "@/components/ui/stat-card";
+import { BusinessCardSkeleton } from "@/components/ui/skeleton";
 import { Colors, Spacing } from "@/constants/theme";
-import { mockBusinesses } from "@/data/mock-businesses";
+import { Business } from "@/data/mock-businesses";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCompareList, useSavedAudits } from "@/hooks/use-local-storage";
+import { trpc } from "@/lib/trpc";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -38,6 +40,46 @@ export default function BusinessDetailScreen() {
 
   const { saveAudit, isBusinessSaved } = useSavedAudits();
   const { addToCompare, isInCompareList, compareList } = useCompareList();
+
+  // State for real data fetching
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // tRPC query for fetching business details
+  const businessDetailsQuery = trpc.gmb.getBusinessDetails.useQuery(
+    { placeId: id },
+    {
+      enabled: !!id,
+      retry: false,
+    }
+  );
+
+  // Fetch business data when component mounts or id changes
+  useEffect(() => {
+    if (!id) return;
+
+    const fetchBusinessData = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const data = await businessDetailsQuery.refetch();
+        if (data.data) {
+          setBusiness(data.data);
+        } else {
+          setError("Business not found. Please try searching again.");
+        }
+      } catch (err) {
+        console.error("Failed to fetch business details:", err);
+        setError("Failed to load business details. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchBusinessData();
+  }, [id, businessDetailsQuery]);
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -56,10 +98,6 @@ export default function BusinessDetailScreen() {
     transform: [{ scale: contentScale.value }],
     opacity: contentScale.value,
   }));
-
-  const business = useMemo(() => {
-    return mockBusinesses.find((b) => b.id === id);
-  }, [id]);
 
   const isSaved = useMemo(() => {
     return business ? isBusinessSaved(business.id) : false;
@@ -121,18 +159,52 @@ export default function BusinessDetailScreen() {
     router.push("/compare");
   }, [router]);
 
-  if (!business) {
+  // Loading state
+  if (isLoading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
+          <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
+            Business Details
+          </ThemedText>
+          <View style={styles.headerRight} />
+        </View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <BusinessCardSkeleton />
+          <BusinessCardSkeleton />
+          <BusinessCardSkeleton />
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
+  // Error state
+  if (error || !business) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+          <Pressable onPress={() => router.back()} style={styles.backButton}>
+            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
+            Business Details
+          </ThemedText>
+          <View style={styles.headerRight} />
         </View>
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={64} color={colors.textDisabled} />
           <ThemedText style={[styles.errorText, { color: colors.textSecondary }]}>
-            Business not found
+            {error || "Business not found"}
+          </ThemedText>
+          <ThemedText style={[styles.errorHint, { color: colors.textDisabled }]}>
+            Please try searching for a different business.
           </ThemedText>
         </View>
       </ThemedView>
@@ -400,6 +472,11 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 16,
     fontSize: 16,
+  },
+  errorHint: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: "center",
   },
   scrollView: {
     flex: 1,

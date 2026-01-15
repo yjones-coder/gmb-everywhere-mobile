@@ -8,6 +8,10 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+/**
+ * OAuth callback handler for Google OAuth authentication
+ * Handles both web and native platform OAuth flows
+ */
 export default function OAuthCallback() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
