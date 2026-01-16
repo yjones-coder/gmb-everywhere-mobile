@@ -1,6 +1,14 @@
 // Authentication module for Chrome extension
 // Handles OAuth login, token storage, and session management
 
+// Import utility functions
+const {
+    loggers
+} = require('./utils.js');
+
+// Get component-specific logger
+const logger = loggers.auth;
+
 const SESSION_TOKEN_KEY = 'app_session_token';
 const USER_INFO_KEY = 'google-oauth-user-info';
 const API_BASE_URL = 'http://localhost:3000'; // TODO: Make configurable
@@ -16,7 +24,7 @@ class Auth {
             const result = await chrome.storage.local.get([SESSION_TOKEN_KEY]);
             return result[SESSION_TOKEN_KEY] || null;
         } catch (error) {
-            console.error('[Auth] Failed to get session token:', error);
+            logger.error('Failed to get session token', { error: error.message });
             return null;
         }
     }
@@ -25,9 +33,9 @@ class Auth {
     async setSessionToken(token) {
         try {
             await chrome.storage.local.set({ [SESSION_TOKEN_KEY]: token });
-            console.log('[Auth] Session token stored');
+            logger.info('Session token stored');
         } catch (error) {
-            console.error('[Auth] Failed to set session token:', error);
+            logger.error('Failed to set session token', { error: error.message });
             throw error;
         }
     }
@@ -36,9 +44,9 @@ class Auth {
     async removeSessionToken() {
         try {
             await chrome.storage.local.remove([SESSION_TOKEN_KEY]);
-            console.log('[Auth] Session token removed');
+            logger.info('Session token removed');
         } catch (error) {
-            console.error('[Auth] Failed to remove session token:', error);
+            logger.error('Failed to remove session token', { error: error.message });
         }
     }
 
@@ -52,7 +60,7 @@ class Auth {
             }
             return null;
         } catch (error) {
-            console.error('[Auth] Failed to get user info:', error);
+            logger.error('Failed to get user info', { error: error.message });
             return null;
         }
     }
@@ -61,9 +69,9 @@ class Auth {
     async setUserInfo(user) {
         try {
             await chrome.storage.local.set({ [USER_INFO_KEY]: JSON.stringify(user) });
-            console.log('[Auth] User info stored');
+            logger.info('User info stored');
         } catch (error) {
-            console.error('[Auth] Failed to set user info:', error);
+            logger.error('Failed to set user info', { error: error.message });
             throw error;
         }
     }
@@ -72,9 +80,9 @@ class Auth {
     async clearUserInfo() {
         try {
             await chrome.storage.local.remove([USER_INFO_KEY]);
-            console.log('[Auth] User info cleared');
+            logger.info('User info cleared');
         } catch (error) {
-            console.error('[Auth] Failed to clear user info:', error);
+            logger.error('Failed to clear user info', { error: error.message });
         }
     }
 
@@ -105,7 +113,7 @@ class Auth {
             const data = await response.json();
             return data.result?.data?.json || null;
         } catch (error) {
-            console.error('[Auth] getMe failed:', error);
+            logger.error('getMe failed', { error: error.message });
             return null;
         }
     }
@@ -115,26 +123,21 @@ class Auth {
         try {
             await this.removeSessionToken();
             await this.clearUserInfo();
-            console.log('[Auth] Logged out');
+            logger.info('Logged out');
         } catch (error) {
-            console.error('[Auth] Logout failed:', error);
+            logger.error('Logout failed', { error: error.message });
         }
     }
 
-    // Generate OAuth login URL
+    // Generate OAuth login URL for Chrome Identity API
     getLoginUrl() {
-        // Use same logic as web app
-        const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID'; // TODO: Configure for extension
-        const redirectUri = `${this.apiBaseUrl}/api/oauth/callback`;
+        const clientId = '1042565699485-gbdl6smh4ugpsph0n3m3c0ioggpsq63m.apps.googleusercontent.com'; // Hardcoded for extension
         const scope = 'https://www.googleapis.com/auth/business.manage https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
-        const state = btoa(redirectUri); // Simple encoding
 
         const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         url.searchParams.set('client_id', clientId);
-        url.searchParams.set('redirect_uri', redirectUri);
         url.searchParams.set('scope', scope);
         url.searchParams.set('response_type', 'code');
-        url.searchParams.set('state', state);
         url.searchParams.set('access_type', 'offline');
 
         return url.toString();
@@ -143,42 +146,65 @@ class Auth {
     // Initiate login
     async login() {
         const loginUrl = this.getLoginUrl();
-        console.log('[Auth] Opening OAuth URL:', loginUrl);
+        logger.info('Starting OAuth flow', { loginUrl });
 
-        // Open in new tab
-        chrome.tabs.create({ url: loginUrl });
-    }
+        try {
+            // Use Chrome Identity API for OAuth
+            const redirectUrl = await chrome.identity.launchWebAuthFlow({
+                url: loginUrl,
+                interactive: true
+            });
 
-    // Handle OAuth callback data from content script
-    async handleOAuthCallback(data) {
-        console.log('[Auth] Handling OAuth callback:', data);
+            logger.info('OAuth flow completed', { redirectUrl });
 
-        if (data.sessionToken) {
-            await this.setSessionToken(data.sessionToken);
-        }
+            if (redirectUrl) {
+                // Extract authorization code from redirect URL
+                const url = new URL(redirectUrl);
+                const code = url.searchParams.get('code');
 
-        if (data.user) {
-            try {
-                const userJson = atob(data.user);
-                const userData = JSON.parse(userJson);
-                const userInfo = {
-                    id: userData.id,
-                    openId: userData.openId,
-                    name: userData.name,
-                    email: userData.email,
-                    loginMethod: userData.loginMethod,
-                    lastSignedIn: new Date(userData.lastSignedIn || Date.now())
-                };
-                await this.setUserInfo(userInfo);
-            } catch (error) {
-                console.error('[Auth] Failed to parse user data:', error);
+                if (code) {
+                    logger.info('Got authorization code, exchanging for token');
+
+                    // Exchange code for session token
+                    const response = await fetch(`${this.apiBaseUrl}/api/oauth/extension`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            code: code,
+                            redirectUri: `https://${chrome.runtime.id}.chromiumapp.org/`
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Token exchange failed: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    logger.info('Token exchange successful');
+
+                    // Store session token and user info
+                    await this.setSessionToken(data.sessionToken);
+                    await this.setUserInfo(data.user);
+
+                    logger.info('Login completed successfully');
+                } else {
+                    throw new Error('No authorization code in redirect URL');
+                }
+            } else {
+                throw new Error('OAuth flow was cancelled');
             }
+        } catch (error) {
+            logger.error('Login failed', { error: error.message });
+            throw error;
         }
     }
+
 
     // Handle user info update from content script
     async handleUserInfoUpdate(user) {
-        console.log('[Auth] Handling user info update:', user);
+        logger.info('Handling user info update', { user });
         await this.setUserInfo(user);
     }
 }

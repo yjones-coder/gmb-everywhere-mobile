@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "856dc314-5273-4f52-b5d4-ef7de68011f8",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "d500f6b1-9844-48ad-bc75-231708091be8",
+  "prevId": "856dc314-5273-4f52-b5d4-ef7de68011f8",
   "tables": {
     "credits": {
       "name": "credits",
@@ -109,6 +109,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "cost": {
+          "name": "cost",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         },
         "createdAt": {
           "name": "createdAt",

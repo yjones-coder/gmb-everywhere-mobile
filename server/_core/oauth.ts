@@ -143,6 +143,44 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
+  // Extension OAuth callback - exchanges code for token and returns JSON with session token
+  app.post("/api/oauth/extension", async (req: Request, res: Response) => {
+    const { code, redirectUri } = req.body;
+
+    if (!code || !redirectUri) {
+      res.status(400).json({ error: "code and redirectUri are required" });
+      return;
+    }
+
+    try {
+      // For extension OAuth, we need to encode the redirectUri as state
+      const state = btoa(redirectUri);
+
+      // Exchange authorization code for Google OAuth tokens
+      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
+
+      // Get user info from Google using access token
+      const userInfo = await sdk.getUserInfo(tokenResponse.access_token);
+
+      // Sync user to database
+      const user = await syncUser(userInfo);
+
+      // Create session token
+      const sessionToken = await sdk.createSessionToken(userInfo.openId!, {
+        name: userInfo.name || "",
+        expiresInMs: ONE_YEAR_MS,
+      });
+
+      res.json({
+        sessionToken,
+        user: buildUserResponse(user),
+      });
+    } catch (error) {
+      console.error("[OAuth] Extension exchange failed", error);
+      res.status(500).json({ error: "OAuth extension exchange failed" });
+    }
+  });
+
   app.post("/api/auth/logout", (req: Request, res: Response) => {
     const cookieOptions = getSessionCookieOptions(req);
     res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

@@ -1,5 +1,13 @@
 // Content script for web app to detect authentication and send to extension
 
+// Import utility functions
+const {
+    loggers
+} = require('./utils.js');
+
+// Get component-specific logger
+const logger = loggers.auth;
+
 const USER_INFO_KEY = "google-oauth-user-info";
 
 // Check if on OAuth callback page and extract session token
@@ -9,7 +17,7 @@ function checkForOAuthCallback() {
     const userParam = url.searchParams.get('user');
 
     if (sessionToken) {
-        console.log('[Auth Content] Found session token in URL');
+        logger.info('Found session token in URL');
         // Send to background script
         chrome.runtime.sendMessage({
             type: 'OAUTH_CALLBACK',
@@ -25,14 +33,14 @@ function checkForUserInfo() {
     if (userInfo) {
         try {
             const user = JSON.parse(userInfo);
-            console.log('[Auth Content] Found user info in localStorage');
+            logger.info('Found user info in localStorage');
             // Send to background script
             chrome.runtime.sendMessage({
                 type: 'USER_INFO_UPDATE',
                 user: user
             });
         } catch (error) {
-            console.error('[Auth Content] Failed to parse user info:', error);
+            logger.error('Failed to parse user info', { error: error.message });
         }
     }
 }
@@ -43,13 +51,13 @@ function listenForStorageChanges() {
         if (e.key === USER_INFO_KEY && e.newValue) {
             try {
                 const user = JSON.parse(e.newValue);
-                console.log('[Auth Content] User info updated in localStorage');
+                logger.info('User info updated in localStorage');
                 chrome.runtime.sendMessage({
                     type: 'USER_INFO_UPDATE',
                     user: user
                 });
             } catch (error) {
-                console.error('[Auth Content] Failed to parse updated user info:', error);
+                logger.error('Failed to parse updated user info', { error: error.message });
             }
         }
     });
@@ -57,7 +65,7 @@ function listenForStorageChanges() {
 
 // Initialize
 function init() {
-    console.log('[Auth Content] Initializing auth content script');
+    logger.info('Initializing auth content script');
 
     // Check immediately
     checkForOAuthCallback();

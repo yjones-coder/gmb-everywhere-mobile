@@ -1,0 +1,1 @@
+ALTER TABLE `exports` ADD `cost` integer DEFAULT 1 NOT NULL;

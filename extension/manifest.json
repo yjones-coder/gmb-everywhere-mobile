@@ -5,11 +5,16 @@
     "description": "Export Google My Business data to Excel from Google Maps",
     "permissions": [
         "activeTab",
-        "storage"
+        "storage",
+        "tabs",
+        "identity",
+        "scripting"
     ],
     "host_permissions": [
         "https://www.google.com/maps/*",
+        "https://maps.google.com/*",
         "http://localhost:3000/*",
+        "http://localhost:3001/*",
         "http://localhost:8081/*"
     ],
     "background": {
@@ -21,6 +26,10 @@
                 "https://www.google.com/maps/*"
             ],
             "js": [
+                "scripts/xlsx.full.min.js",
+                "scripts/utils.js",
+                "scripts/scraper.js",
+                "scripts/excel.js",
                 "content.js"
             ]
         },

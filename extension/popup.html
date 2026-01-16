@@ -14,12 +14,21 @@
     <div class="auth-section">
       <div id="auth-status">
         <p id="auth-text">Not logged in</p>
-        <button id="login-btn">Login</button>
-        <button id="logout-btn" style="display: none;">Logout</button>
+        <button id="login-btn" type="button">Login</button>
+        <button id="logout-btn" type="button" style="display: none;">Logout</button>
       </div>
     </div>
+    <div class="credits-section" id="credits-section" style="display: none;">
+      <div class="credits-info">
+        <p id="credits-text">Credits: 0</p>
+        <p class="export-cost">Export cost: 1 credit</p>
+      </div>
+      <button id="buy-credits-btn" type="button">Buy Credits</button>
+    </div>
     <div class="status">
+      <div id="loading-spinner" class="loading-spinner" style="display: none;"></div>
       <p id="status-text">Ready to export</p>
+      <div id="error-message" class="error-message" style="display: none;"></div>
     </div>
     <div class="controls">
       <button id="start-export" disabled>Start Export</button>
@@ -32,6 +41,7 @@
       <p id="progress-text">Exporting... 0%</p>
     </div>
   </div>
+  <script src="scripts/utils.js"></script>
   <script src="popup.js"></script>
 </body>
 

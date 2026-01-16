@@ -7,6 +7,11 @@ import { trpc } from "../lib/trpc";
 export default function DashboardHome() {
   const router = useRouter();
   const { data: user, isLoading } = trpc.auth.me.useQuery();
+  const logout = trpc.auth.logout.useMutation({
+    onSuccess: () => {
+      router.push("/login");
+    },
+  });
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -40,7 +45,7 @@ export default function DashboardHome() {
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-700">Welcome, {user.name || user.email}</span>
               <button
-                onClick={() => trpc.auth.logout.mutate()}
+                onClick={() => logout.mutate()}
                 className="text-sm text-gray-500 hover:text-gray-700"
               >
                 Logout

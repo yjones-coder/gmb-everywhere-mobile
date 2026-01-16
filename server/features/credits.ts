@@ -54,4 +54,39 @@ export const creditsRouter = router({
 
             return { success: true };
         }),
+
+    deduct: protectedProcedure
+        .input(z.object({
+            amount: z.number().positive(),
+            description: z.string().optional(),
+            type: z.string().default("export"),
+        }))
+        .mutation(async ({ ctx, input }) => {
+            const db = await getDb();
+            if (!db) throw new Error("Database not available");
+
+            // Check current balance
+            const balanceResult = await db
+                .select({
+                    balance: sql<number>`SUM(CASE WHEN type = 'purchase' THEN amount ELSE -amount END)`,
+                })
+                .from(credits)
+                .where(eq(credits.userId, ctx.user.id));
+
+            const currentBalance = balanceResult[0]?.balance || 0;
+
+            if (currentBalance < input.amount) {
+                throw new Error("Insufficient credits");
+            }
+
+            // Deduct credits
+            await db.insert(credits).values({
+                userId: ctx.user.id,
+                amount: -input.amount,
+                type: input.type,
+                description: input.description || "Credit deduction",
+            });
+
+            return { success: true, newBalance: currentBalance - input.amount };
+        }),
 });
