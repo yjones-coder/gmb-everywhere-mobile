@@ -1,0 +1,46 @@
+{
+    "manifest_version": 3,
+    "name": "GMB Excel Export",
+    "version": "1.0.0",
+    "description": "Export Google My Business data to Excel from Google Maps",
+    "permissions": [
+        "activeTab",
+        "storage"
+    ],
+    "host_permissions": [
+        "https://www.google.com/maps/*",
+        "http://localhost:3000/*",
+        "http://localhost:8081/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://www.google.com/maps/*"
+            ],
+            "js": [
+                "content.js"
+            ]
+        },
+        {
+            "matches": [
+                "http://localhost:8081/*"
+            ],
+            "js": [
+                "scripts/auth-content.js"
+            ]
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "GMB Excel Export"
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "32": "icons/icon32.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+}

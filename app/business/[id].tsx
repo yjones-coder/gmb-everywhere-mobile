@@ -1,12 +1,13 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Animated, {
@@ -31,55 +32,42 @@ import { trpc } from "@/lib/trpc";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
+// Max width for content on larger screens (laptop/web)
+const MAX_CONTENT_WIDTH = 720;
+
 export default function BusinessDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
+  const { width: windowWidth } = useWindowDimensions();
+
+  // Determine if we're on a larger screen (laptop/web)
+  const isLargeScreen = windowWidth >= 768;
 
   const { saveAudit, isBusinessSaved } = useSavedAudits();
   const { addToCompare, isInCompareList, compareList } = useCompareList();
 
-  // State for real data fetching
-  const [business, setBusiness] = useState<Business | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // tRPC query for fetching business details
-  const businessDetailsQuery = trpc.gmb.getBusinessDetails.useQuery(
-    { placeId: id },
+  // tRPC query for fetching business details - uses built-in query behavior
+  const {
+    data: business,
+    isLoading,
+    error: queryError,
+  } = trpc.gmb.getBusinessDetails.useQuery(
+    { placeId: id! },
     {
       enabled: !!id,
       retry: false,
     }
   );
 
-  // Fetch business data when component mounts or id changes
-  useEffect(() => {
-    if (!id) return;
-
-    const fetchBusinessData = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const data = await businessDetailsQuery.refetch();
-        if (data.data) {
-          setBusiness(data.data);
-        } else {
-          setError("Business not found. Please try searching again.");
-        }
-      } catch (err) {
-        console.error("Failed to fetch business details:", err);
-        setError("Failed to load business details. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchBusinessData();
-  }, [id, businessDetailsQuery]);
+  // Derive error message from query error
+  const error = queryError
+    ? "Failed to load business details. Please try again."
+    : !business && !isLoading
+      ? "Business not found. Please try searching again."
+      : null;
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -109,36 +97,30 @@ export default function BusinessDetailScreen() {
 
   const handleSaveAudit = useCallback(async () => {
     if (!business) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isSaved) {
       Alert.alert("Already Saved", "This business audit is already saved.");
       return;
     }
     await saveAudit(business);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert("Saved", "Business audit saved successfully!");
   }, [business, isSaved, saveAudit]);
 
   const handleAddToCompare = useCallback(async () => {
     if (!business) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (inCompare) {
       Alert.alert("Already Added", "This business is already in your comparison list.");
       return;
     }
     const success = await addToCompare(business);
     if (success) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Added", "Business added to comparison list.");
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Limit Reached", "You can compare up to 4 businesses at a time.");
     }
   }, [business, inCompare, addToCompare]);
 
   const handleCategoryAnalysis = useCallback(() => {
     if (!business) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/business/categories",
       params: { id: business.id },
@@ -147,7 +129,6 @@ export default function BusinessDetailScreen() {
 
   const handleReviewAudit = useCallback(() => {
     if (!business) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/business/reviews",
       params: { id: business.id },
@@ -155,7 +136,6 @@ export default function BusinessDetailScreen() {
   }, [business, router]);
 
   const handleCompare = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push("/compare");
   }, [router]);
 
@@ -163,23 +143,32 @@ export default function BusinessDetailScreen() {
   if (isLoading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-          </Pressable>
-          <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
-            Business Details
-          </ThemedText>
-          <View style={styles.headerRight} />
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
+          <View style={[styles.headerInner, isLargeScreen && { maxWidth: MAX_CONTENT_WIDTH }]}>
+            <Pressable onPress={() => router.back()} style={styles.backButton}>
+              <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+            </Pressable>
+            <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
+              Business Details
+            </ThemedText>
+            <View style={styles.headerRight} />
+          </View>
         </View>
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 40 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          <BusinessCardSkeleton />
-          <BusinessCardSkeleton />
-          <BusinessCardSkeleton />
+          <View style={[styles.contentWrapper, isLargeScreen && { maxWidth: MAX_CONTENT_WIDTH }]}>
+            <BusinessCardSkeleton />
+            <View style={styles.sectionSpacer} />
+            <BusinessCardSkeleton />
+            <View style={styles.sectionSpacer} />
+            <BusinessCardSkeleton />
+          </View>
         </ScrollView>
       </ThemedView>
     );
@@ -189,14 +178,16 @@ export default function BusinessDetailScreen() {
   if (error || !business) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-          </Pressable>
-          <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
-            Business Details
-          </ThemedText>
-          <View style={styles.headerRight} />
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
+          <View style={[styles.headerInner, isLargeScreen && { maxWidth: MAX_CONTENT_WIDTH }]}>
+            <Pressable onPress={() => router.back()} style={styles.backButton}>
+              <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+            </Pressable>
+            <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
+              Business Details
+            </ThemedText>
+            <View style={styles.headerRight} />
+          </View>
         </View>
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={64} color={colors.textDisabled} />
@@ -216,40 +207,45 @@ export default function BusinessDetailScreen() {
       <Animated.View
         style={[
           styles.header,
-          { paddingTop: Math.max(insets.top, 16), backgroundColor: colors.surface },
+          { paddingTop: Math.max(insets.top, 20), backgroundColor: colors.surface },
           headerAnimatedStyle,
         ]}
       >
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
-        <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
-          Business Details
-        </ThemedText>
-        <View style={styles.headerRight} />
+        <View style={[styles.headerInner, isLargeScreen && { maxWidth: MAX_CONTENT_WIDTH }]}>
+          <Pressable onPress={() => router.back()} style={styles.backButton}>
+            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+          </Pressable>
+          <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
+            Business Details
+          </ThemedText>
+          <View style={styles.headerRight} />
+        </View>
       </Animated.View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 40 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={contentAnimatedStyle}>
+        <Animated.View style={[styles.contentWrapper, isLargeScreen && { maxWidth: MAX_CONTENT_WIDTH }, contentAnimatedStyle]}>
           {/* Hero Card with Score Ring */}
-          <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.heroCard, { backgroundColor: colors.surface }, Platform.OS === 'web' && styles.cardShadow]}>
             <View style={styles.heroContent}>
               <View style={styles.heroLeft}>
                 <ThemedText type="title" style={styles.businessName}>
                   {business.name}
                 </ThemedText>
                 <View style={styles.addressRow}>
-                  <MaterialIcons name="location-on" size={16} color={colors.textSecondary} />
+                  <MaterialIcons name="location-on" size={18} color={colors.textSecondary} />
                   <ThemedText style={[styles.addressText, { color: colors.textSecondary }]} numberOfLines={2}>
                     {business.address}
                   </ThemedText>
                 </View>
                 <View style={styles.contactRow}>
-                  <MaterialIcons name="phone" size={16} color={colors.textSecondary} />
+                  <MaterialIcons name="phone" size={18} color={colors.textSecondary} />
                   <ThemedText style={[styles.contactText, { color: colors.textSecondary }]}>
                     {business.phone}
                   </ThemedText>
@@ -258,35 +254,39 @@ export default function BusinessDetailScreen() {
               <ScoreRing
                 score={business.rating}
                 maxScore={5}
-                size={90}
-                strokeWidth={8}
+                size={100}
+                strokeWidth={10}
                 label="Rating"
                 delay={300}
               />
             </View>
-            <View style={styles.reviewCountBadge}>
-              <MaterialIcons name="rate-review" size={14} color={colors.tint} />
+            <View style={[styles.reviewCountBadge, { borderTopColor: colors.border }]}>
+              <MaterialIcons name="rate-review" size={16} color={colors.tint} />
               <ThemedText style={[styles.reviewCountText, { color: colors.tint }]}>
                 {business.reviewCount.toLocaleString()} reviews
               </ThemedText>
             </View>
           </View>
 
+          <View style={styles.sectionSpacer} />
+
           {/* Categories Section */}
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.card, { backgroundColor: colors.surface }, Platform.OS === 'web' && styles.cardShadow]}>
             <View style={styles.cardHeader}>
-              <MaterialIcons name="label" size={20} color={colors.tint} />
+              <MaterialIcons name="label" size={22} color={colors.tint} />
               <ThemedText type="subtitle" style={styles.sectionTitle}>
                 Categories
               </ThemedText>
             </View>
             <View style={styles.categoriesContainer}>
               <CategoryBadge category={business.primaryCategory} isPrimary />
-              {business.secondaryCategories.map((cat, index) => (
+              {business.secondaryCategories.map((cat: string, index: number) => (
                 <CategoryBadge key={index} category={cat} />
               ))}
             </View>
           </View>
+
+          <View style={styles.sectionSpacer} />
 
           {/* Quick Stats with Animation */}
           <View style={styles.statsRow}>
@@ -310,24 +310,26 @@ export default function BusinessDetailScreen() {
             />
           </View>
 
+          <View style={styles.sectionSpacer} />
+
           {/* Action Buttons */}
           <View style={styles.actionsContainer}>
             <AnimatedPressable
               style={[styles.actionButton, { backgroundColor: colors.tint }]}
               onPress={handleCategoryAnalysis}
             >
-              <MaterialIcons name="analytics" size={20} color="#FFFFFF" />
+              <MaterialIcons name="analytics" size={22} color="#FFFFFF" />
               <ThemedText style={styles.actionButtonText}>Category Analysis</ThemedText>
-              <MaterialIcons name="chevron-right" size={20} color="#FFFFFF" />
+              <MaterialIcons name="chevron-right" size={22} color="#FFFFFF" />
             </AnimatedPressable>
 
             <AnimatedPressable
               style={[styles.actionButton, { backgroundColor: colors.tint }]}
               onPress={handleReviewAudit}
             >
-              <MaterialIcons name="insights" size={20} color="#FFFFFF" />
+              <MaterialIcons name="insights" size={22} color="#FFFFFF" />
               <ThemedText style={styles.actionButtonText}>Review Audit</ThemedText>
-              <MaterialIcons name="chevron-right" size={20} color="#FFFFFF" />
+              <MaterialIcons name="chevron-right" size={22} color="#FFFFFF" />
             </AnimatedPressable>
 
             <View style={styles.secondaryActions}>
@@ -341,7 +343,7 @@ export default function BusinessDetailScreen() {
               >
                 <MaterialIcons
                   name={isSaved ? "bookmark" : "bookmark-border"}
-                  size={20}
+                  size={22}
                   color={colors.tint}
                 />
                 <ThemedText style={[styles.secondaryButtonText, { color: colors.tint }]}>
@@ -359,7 +361,7 @@ export default function BusinessDetailScreen() {
               >
                 <MaterialIcons
                   name={inCompare ? "check" : "compare-arrows"}
-                  size={20}
+                  size={22}
                   color={colors.tint}
                 />
                 <ThemedText style={[styles.secondaryButtonText, { color: colors.tint }]}>
@@ -373,7 +375,7 @@ export default function BusinessDetailScreen() {
                 style={[styles.compareButton, { backgroundColor: colors.success }]}
                 onPress={handleCompare}
               >
-                <MaterialIcons name="compare-arrows" size={20} color="#FFFFFF" />
+                <MaterialIcons name="compare-arrows" size={22} color="#FFFFFF" />
                 <ThemedText style={styles.actionButtonText}>
                   View Comparison ({compareList.length})
                 </ThemedText>
@@ -381,10 +383,12 @@ export default function BusinessDetailScreen() {
             )}
           </View>
 
+          <View style={styles.sectionSpacer} />
+
           {/* Business IDs */}
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.card, { backgroundColor: colors.surface }, Platform.OS === 'web' && styles.cardShadow]}>
             <View style={styles.cardHeader}>
-              <MaterialIcons name="fingerprint" size={20} color={colors.tint} />
+              <MaterialIcons name="fingerprint" size={22} color={colors.tint} />
               <ThemedText type="subtitle" style={styles.sectionTitle}>
                 Business IDs
               </ThemedText>
@@ -401,34 +405,38 @@ export default function BusinessDetailScreen() {
             </View>
           </View>
 
+          <View style={styles.sectionSpacer} />
+
           {/* Services */}
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.card, { backgroundColor: colors.surface }, Platform.OS === 'web' && styles.cardShadow]}>
             <View style={styles.cardHeader}>
-              <MaterialIcons name="build" size={20} color={colors.tint} />
+              <MaterialIcons name="build" size={22} color={colors.tint} />
               <ThemedText type="subtitle" style={styles.sectionTitle}>
                 Services
               </ThemedText>
             </View>
             <View style={styles.servicesList}>
-              {business.services.map((service, index) => (
+              {business.services.map((service: string, index: number) => (
                 <View key={index} style={styles.serviceItem}>
-                  <MaterialIcons name="check-circle" size={16} color={colors.success} />
+                  <MaterialIcons name="check-circle" size={18} color={colors.success} />
                   <ThemedText style={styles.serviceText}>{service}</ThemedText>
                 </View>
               ))}
             </View>
           </View>
 
+          <View style={styles.sectionSpacer} />
+
           {/* Attributes */}
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.card, { backgroundColor: colors.surface }, Platform.OS === 'web' && styles.cardShadow]}>
             <View style={styles.cardHeader}>
-              <MaterialIcons name="verified" size={20} color={colors.tint} />
+              <MaterialIcons name="verified" size={22} color={colors.tint} />
               <ThemedText type="subtitle" style={styles.sectionTitle}>
                 Attributes
               </ThemedText>
             </View>
             <View style={styles.attributesList}>
-              {business.attributes.map((attr, index) => (
+              {business.attributes.map((attr: string, index: number) => (
                 <View key={index} style={[styles.attributeChip, { backgroundColor: colors.tintLight }]}>
                   <ThemedText style={[styles.attributeText, { color: colors.tint }]}>{attr}</ThemedText>
                 </View>
@@ -446,205 +454,228 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(0,0,0,0.08)",
+  },
+  headerInner: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
+    width: "100%",
+    alignSelf: "center",
   },
   backButton: {
-    padding: 4,
+    padding: 8,
+    marginLeft: -8,
   },
   headerTitle: {
     flex: 1,
     textAlign: "center",
-    fontSize: 17,
+    fontSize: 18,
+    fontWeight: "600",
   },
   headerRight: {
-    width: 32,
+    width: 40,
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: Spacing.xxl,
   },
   errorText: {
-    marginTop: 16,
-    fontSize: 16,
+    marginTop: 20,
+    fontSize: 17,
+    textAlign: "center",
   },
   errorHint: {
-    marginTop: 8,
-    fontSize: 14,
+    marginTop: 12,
+    fontSize: 15,
     textAlign: "center",
+    lineHeight: 22,
   },
   scrollView: {
     flex: 1,
   },
-  content: {
-    padding: Spacing.lg,
+  scrollContent: {
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.xl,
+    alignItems: "center",
+  },
+  contentWrapper: {
+    width: "100%",
+    alignSelf: "center",
+  },
+  sectionSpacer: {
+    height: Spacing.xl,
   },
   heroCard: {
-    padding: Spacing.lg,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
+    padding: Spacing.xl,
+    borderRadius: 20,
+  },
+  cardShadow: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
   heroContent: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
   },
   heroLeft: {
     flex: 1,
-    marginRight: 16,
+    marginRight: 24,
   },
   businessName: {
-    fontSize: 22,
-    marginBottom: 8,
-    lineHeight: 28,
+    fontSize: 26,
+    marginBottom: 16,
+    lineHeight: 32,
+    fontWeight: "700",
   },
   addressRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 6,
+    marginBottom: 12,
   },
   addressText: {
-    marginLeft: 6,
-    fontSize: 13,
+    marginLeft: 10,
+    fontSize: 15,
     flex: 1,
-    lineHeight: 18,
+    lineHeight: 22,
   },
   contactRow: {
     flexDirection: "row",
     alignItems: "center",
   },
   contactText: {
-    marginLeft: 6,
-    fontSize: 13,
-    lineHeight: 18,
+    marginLeft: 10,
+    fontSize: 15,
+    lineHeight: 22,
   },
   reviewCountBadge: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.05)",
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   reviewCountText: {
-    marginLeft: 6,
-    fontSize: 14,
+    marginLeft: 10,
+    fontSize: 16,
     fontWeight: "600",
   },
   card: {
-    padding: Spacing.lg,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
+    padding: Spacing.xl,
+    borderRadius: 16,
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 20,
   },
   sectionTitle: {
-    marginLeft: 8,
-    fontSize: 17,
+    marginLeft: 12,
+    fontSize: 19,
+    fontWeight: "600",
   },
   categoriesContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 12,
   },
   statsRow: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 16,
+    gap: 16,
   },
   actionsContainer: {
-    marginBottom: 16,
+    gap: 12,
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 10,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderRadius: 14,
   },
   actionButtonText: {
     flex: 1,
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "600",
-    marginLeft: 10,
+    marginLeft: 14,
   },
   secondaryActions: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
   },
   secondaryButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 14,
     borderWidth: 1.5,
   },
   secondaryButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
-    marginLeft: 6,
+    marginLeft: 8,
   },
   compareButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 10,
+    paddingVertical: 18,
+    borderRadius: 14,
   },
   idContainer: {
-    gap: 8,
+    gap: 12,
   },
   idItem: {
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
   },
   idLabel: {
-    fontSize: 12,
-    marginBottom: 4,
+    fontSize: 13,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   idValue: {
-    fontSize: 13,
-    fontFamily: "monospace",
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   servicesList: {
-    gap: 10,
+    gap: 14,
   },
   serviceItem: {
     flexDirection: "row",
     alignItems: "center",
   },
   serviceText: {
-    marginLeft: 10,
-    fontSize: 14,
-    lineHeight: 20,
+    marginLeft: 14,
+    fontSize: 15,
+    lineHeight: 22,
   },
   attributesList: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
   },
   attributeChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
   attributeText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "500",
   },
 });

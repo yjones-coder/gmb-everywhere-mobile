@@ -1,5 +1,4 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -62,7 +61,6 @@ export default function HomeScreen() {
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsSearching(true);
     setSearchError(null);
 
@@ -81,15 +79,14 @@ export default function HomeScreen() {
         addSearch(searchQuery, mockResults.length);
 
         if (mockResults.length > 0) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Success
         } else {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          // Warning
         }
       } else if (result.status === "no_results") {
         setSearchResults([]);
         setHasSearched(true);
         addSearch(searchQuery, 0);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       } else {
         // Success with real data
         setSearchResults(result.businesses);
@@ -97,9 +94,9 @@ export default function HomeScreen() {
         addSearch(searchQuery, result.businesses.length);
 
         if (result.businesses.length > 0) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Success
         } else {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          // Warning
         }
       }
     } catch (error) {
@@ -112,7 +109,7 @@ export default function HomeScreen() {
       addSearch(searchQuery, mockResults.length);
 
       if (mockResults.length > 0) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Success
       }
     } finally {
       setIsSearching(false);
@@ -120,7 +117,6 @@ export default function HomeScreen() {
   }, [searchQuery, addSearch, searchMutation]);
 
   const handleRecentSearchPress = useCallback(async (query: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSearchQuery(query);
     setIsSearching(true);
     setSearchError(null);
@@ -154,7 +150,6 @@ export default function HomeScreen() {
   }, [searchMutation]);
 
   const handleBusinessPress = useCallback((business: Business) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/business/[id]",
       params: { id: business.id },
@@ -162,7 +157,6 @@ export default function HomeScreen() {
   }, [router]);
 
   const handleClearSearch = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSearchQuery("");
     setSearchResults([]);
     setHasSearched(false);
@@ -173,7 +167,6 @@ export default function HomeScreen() {
     if (!searchQuery.trim()) return;
     setRefreshing(true);
     setSearchError(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
       const result = await searchMutation.mutateAsync({
@@ -196,7 +189,6 @@ export default function HomeScreen() {
       setSearchResults(mockResults);
     } finally {
       setRefreshing(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }, [searchQuery, searchMutation]);
 

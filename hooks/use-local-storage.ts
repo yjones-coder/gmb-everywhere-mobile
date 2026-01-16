@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 
 import { Business, RecentSearch } from "@/data/mock-businesses";
@@ -27,7 +26,7 @@ export function useSavedAudits() {
 
   const loadAudits = async () => {
     try {
-      const data = await AsyncStorage.getItem(SAVED_AUDITS_KEY);
+      const data = localStorage.getItem(SAVED_AUDITS_KEY);
       if (data) {
         setAudits(JSON.parse(data));
       }
@@ -48,20 +47,20 @@ export function useSavedAudits() {
     };
     const updated = [newAudit, ...audits];
     setAudits(updated);
-    await AsyncStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
+    localStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
     return newAudit;
   }, [audits]);
 
   const deleteAudit = useCallback(async (id: string) => {
     const updated = audits.filter((a) => a.id !== id);
     setAudits(updated);
-    await AsyncStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
+    localStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
   }, [audits]);
 
   const updateAudit = useCallback(async (id: string, updates: Partial<SavedAudit>) => {
     const updated = audits.map((a) => (a.id === id ? { ...a, ...updates } : a));
     setAudits(updated);
-    await AsyncStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
+    localStorage.setItem(SAVED_AUDITS_KEY, JSON.stringify(updated));
   }, [audits]);
 
   const isBusinessSaved = useCallback((businessId: string) => {
@@ -81,7 +80,7 @@ export function useRecentSearches() {
 
   const loadSearches = async () => {
     try {
-      const data = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
+      const data = localStorage.getItem(RECENT_SEARCHES_KEY);
       if (data) {
         setSearches(JSON.parse(data));
       }
@@ -104,18 +103,18 @@ export function useRecentSearches() {
     // Keep only last 10 searches
     const updated = [newSearch, ...filtered].slice(0, 10);
     setSearches(updated);
-    await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
   }, [searches]);
 
   const clearSearches = useCallback(async () => {
     setSearches([]);
-    await AsyncStorage.removeItem(RECENT_SEARCHES_KEY);
+    localStorage.removeItem(RECENT_SEARCHES_KEY);
   }, []);
 
   const deleteSearch = useCallback(async (id: string) => {
     const updated = searches.filter((s) => s.id !== id);
     setSearches(updated);
-    await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
   }, [searches]);
 
   return { searches, loading, addSearch, clearSearches, deleteSearch, refresh: loadSearches };
@@ -131,7 +130,7 @@ export function useCompareList() {
 
   const loadCompareList = async () => {
     try {
-      const data = await AsyncStorage.getItem(COMPARE_LIST_KEY);
+      const data = localStorage.getItem(COMPARE_LIST_KEY);
       if (data) {
         setCompareList(JSON.parse(data));
       }
@@ -151,19 +150,19 @@ export function useCompareList() {
     }
     const updated = [...compareList, business];
     setCompareList(updated);
-    await AsyncStorage.setItem(COMPARE_LIST_KEY, JSON.stringify(updated));
+    localStorage.setItem(COMPARE_LIST_KEY, JSON.stringify(updated));
     return true;
   }, [compareList]);
 
   const removeFromCompare = useCallback(async (businessId: string) => {
     const updated = compareList.filter((b) => b.id !== businessId);
     setCompareList(updated);
-    await AsyncStorage.setItem(COMPARE_LIST_KEY, JSON.stringify(updated));
+    localStorage.setItem(COMPARE_LIST_KEY, JSON.stringify(updated));
   }, [compareList]);
 
   const clearCompareList = useCallback(async () => {
     setCompareList([]);
-    await AsyncStorage.removeItem(COMPARE_LIST_KEY);
+    localStorage.removeItem(COMPARE_LIST_KEY);
   }, []);
 
   const isInCompareList = useCallback((businessId: string) => {
